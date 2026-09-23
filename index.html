@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#f5f7fb">
+<title>こどもマネー・ラボ</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div><small>MONEY EDUCATION</small><h1>こどもマネー・ラボ</h1><p>貯める・増やす・考えるを一緒に学ぶ</p></div>
+  <button id="settings">⚙️</button>
+</header>
+<main>
+<section class="card hero">
+  <div class="childbar"><label>子ども</label><select id="child"></select><button id="addChild">＋追加</button></div>
+  <div class="stats">
+    <div><small>現在の合計</small><strong id="total">¥0</strong><span id="gain">元本 ¥0</span></div>
+    <div><small>貯金</small><b id="cash">¥0</b></div>
+    <div><small>投資</small><b id="invest">¥0</b></div>
+  </div>
+</section>
+
+<nav>
+<button class="tab active" data-tab="home">🏠 ホーム</button>
+<button class="tab" data-tab="history">🧾 入金履歴</button>
+<button class="tab" data-tab="sim">📈 将来予想</button>
+<button class="tab" data-tab="learn">💡 学ぶ</button>
+</nav>
+
+<section id="home" class="panel active">
+<div class="head"><h2>お金の内訳</h2><button class="primary" id="addTx">＋ 入金</button></div>
+<div id="assets" class="grid"></div>
+<div class="card lesson"><small>今日の学び</small><h3>貯金と投資は役割が違う</h3><p>貯金は値下がりしにくい一方、大きく増えることも期待しにくい。投資は値段が上下する代わりに、長期で増える可能性があります。</p></div>
+<div class="card"><div class="head"><h2>元本の推移</h2><small>入金ベース</small></div><canvas id="chart" height="220"></canvas></div>
+</section>
+
+<section id="history" class="panel">
+<div class="head"><h2>入金履歴</h2><button class="primary" id="addTx2">＋ 入金</button></div>
+<div id="transactions"></div>
+</section>
+
+<section id="sim" class="panel">
+<div class="card">
+<small>FUTURE SIMULATION</small><h2>18歳のとき、いくら？</h2>
+<p class="muted">現在残高＋これからの年間入金を、教育用の想定利率で試算します。</p>
+<div class="form3">
+<label>現在年齢<input id="age" type="number" min="0" max="100"></label>
+<label>年間追加額<input id="annual" type="number" min="0" step="10000" value="120000"></label>
+<label>年数<input id="years" type="number" min="1" max="60" value="11"></label>
+</div>
+<button class="primary wide" id="simulate">シミュレーションする</button>
+</div>
+<div id="result"></div>
+<div class="card"><h3>大切な注意</h3><p>想定リターンは将来の保証ではありません。実際の投資では価格が大きく下がることがあります。</p></div>
+</section>
+
+<section id="learn" class="panel">
+<div class="learn">
+<article class="card"><b>🏦</b><h3>貯金</h3><p>お金を安全に置いておく方法。増えるスピードは一般に小さいです。</p><span class="risk low">リスク：小</span></article>
+<article class="card"><b>🌎</b><h3>全世界株式</h3><p>世界中の会社に広く投資する考え方。元本割れの可能性があります。</p><span class="risk high">リスク：大</span></article>
+<article class="card"><b>🇺🇸</b><h3>S&amp;P500</h3><p>米国の代表的な株価指数。価格は上下し、将来の利益は保証されません。</p><span class="risk high">リスク：大</span></article>
+<article class="card"><b>⏳</b><h3>複利</h3><p>増えた分も次の期間の運用対象になり、時間とともに成長が積み重なる考え方です。</p><span class="risk medium">時間が味方</span></article>
+<article class="card"><b>📉</b><h3>リスク</h3><p>「危険」だけでなく、結果がどれくらい上下する可能性があるかという意味でも使います。</p><span class="risk medium">値動き</span></article>
+<article class="card"><b>🧠</b><h3>考えて選ぶ</h3><p>いつ使うお金か、どこまで値下がりに耐えられるかを考えて選びます。</p><span class="risk medium">自分で判断</span></article>
+</div>
+</section>
+</main>
+
+<div class="modal hidden" id="txModal"><div class="modalbox">
+<div class="modalhead"><h2>入金を記録</h2><button data-close="txModal">×</button></div>
+<form id="txForm">
+<label>日付<input id="txDate" type="date" required></label>
+<label>金額<input id="amount" type="number" min="1" required></label>
+<label>理由<select id="reason"><option>お年玉</option><option>誕生日</option><option>入学祝い</option><option>お手伝い</option><option>親から</option><option>その他</option></select></label>
+<label>行き先<select id="asset"></select></label>
+<label>メモ<textarea id="memo" rows="2"></textarea></label>
+<button class="primary wide">保存</button>
+</form></div></div>
+
+<div class="modal hidden" id="childModal"><div class="modalbox">
+<div class="modalhead"><h2>子どもを追加</h2><button data-close="childModal">×</button></div>
+<form id="childForm"><label>名前<input id="childName" required></label><label>生年<input id="birth" type="number" min="2000" max="2100" required></label><button class="primary wide">追加</button></form>
+</div></div>
+
+<div class="modal hidden" id="settingsModal"><div class="modalbox">
+<div class="modalhead"><h2>データ管理</h2><button data-close="settingsModal">×</button></div>
+<p class="muted">データはこのブラウザに保存され、GitHubには送信されません。</p>
+<button class="secondary wide" id="export">⬇️ JSONを書き出す</button>
+<label class="file wide">⬆️ JSONを読み込む<input id="import" type="file" accept=".json"></label>
+<button class="danger wide" id="reset">データを初期化</button>
+</div></div>
+
+<footer>こどもマネー・ラボ V1｜教育用シミュレーションです。投資成果を保証するものではありません。</footer>
+<script src="app.js"></script>
+</body></html>
