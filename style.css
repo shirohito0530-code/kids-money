@@ -647,3 +647,289 @@ canvas {
   }
 
 }
+
+/* ============================================================
+   V2.3 LEARNING
+============================================================ */
+
+.learn-content {
+  display: block;
+}
+
+.learn-menu-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.learn-menu-card {
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 22px 16px;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.learn-menu-card:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.08);
+}
+
+.learn-menu-card:active {
+  transform: scale(0.98);
+}
+
+.learn-menu-icon {
+  display: block;
+  font-size: 34px;
+  margin-bottom: 12px;
+}
+
+.learn-menu-card strong {
+  display: block;
+  font-size: 18px;
+  margin-bottom: 7px;
+}
+
+.learn-menu-card > span:last-child {
+  display: block;
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.learn-filter {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 12px;
+  margin-bottom: 10px;
+}
+
+.learn-filter button {
+  flex: 0 0 auto;
+  border: 1px solid #d0d5dd;
+  background: #ffffff;
+  border-radius: 999px;
+  padding: 9px 14px;
+  cursor: pointer;
+}
+
+.learn-filter button.active {
+  background: #315efb;
+  color: #ffffff;
+  border-color: #315efb;
+}
+
+.glossary-grid,
+.why-grid,
+.lesson-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.glossary-card,
+.why-card,
+.lesson-card-v23 {
+  height: 100%;
+}
+
+.learn-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.learn-icon {
+  font-size: 32px;
+}
+
+.learn-icon.large {
+  font-size: 54px;
+  margin-bottom: 12px;
+}
+
+.learn-category {
+  display: inline-block;
+  background: #f2f4f7;
+  color: #475467;
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-size: 11px;
+}
+
+.glossary-card h3,
+.why-card h3,
+.lesson-card-v23 h3 {
+  margin-top: 8px;
+  margin-bottom: 9px;
+}
+
+.glossary-card p,
+.why-card p,
+.lesson-card-v23 p {
+  line-height: 1.7;
+}
+
+.learn-example {
+  background: #f8fafc;
+  border-left: 4px solid #315efb;
+  padding: 12px;
+  margin-top: 14px;
+  border-radius: 8px;
+}
+
+.learn-example p {
+  margin-bottom: 0;
+}
+
+.why-icon,
+.lesson-icon {
+  font-size: 42px;
+  margin-bottom: 10px;
+}
+
+.lesson-icon.large {
+  font-size: 60px;
+}
+
+.learn-back-row {
+  margin-bottom: 14px;
+}
+
+.why-detail,
+.lesson-detail,
+.glossary-detail {
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.why-detail h2,
+.lesson-detail h2,
+.glossary-detail h2 {
+  margin-top: 10px;
+  line-height: 1.4;
+}
+
+.why-answer {
+  background: #f8fafc;
+  border-radius: 14px;
+  padding: 18px;
+  margin: 20px 0;
+}
+
+.why-answer h3 {
+  margin-top: 0;
+}
+
+.why-answer p {
+  line-height: 1.9;
+  margin-bottom: 0;
+}
+
+.lesson-description {
+  font-size: 16px;
+  line-height: 1.9;
+}
+
+.lesson-flow {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin: 24px 0;
+}
+
+.lesson-flow-item {
+  width: min(100%, 320px);
+  background: #f8fafc;
+  border: 1px solid #eaecf0;
+  border-radius: 14px;
+  padding: 12px;
+  text-align: center;
+  font-weight: 600;
+}
+
+.lesson-flow-item:empty {
+  display: none;
+}
+
+.learn-message {
+  margin-top: 18px;
+  background: #fff9e6;
+  border: 1px solid #f5df9b;
+}
+
+.learn-message-icon {
+  font-size: 32px;
+}
+
+.learn-message h3 {
+  margin-top: 8px;
+}
+
+.learn-message p {
+  line-height: 1.8;
+}
+
+.error-card {
+  border: 1px solid #fca5a5;
+}
+
+/* ============================================================
+   MOBILE
+============================================================ */
+
+@media (max-width: 700px) {
+
+  .learn-menu-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .glossary-grid,
+  .why-grid,
+  .lesson-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .learn-menu-card {
+    display: grid;
+    grid-template-columns: 54px 1fr;
+    column-gap: 12px;
+    align-items: center;
+    padding: 16px;
+  }
+
+  .learn-menu-icon {
+    grid-row: span 2;
+    margin-bottom: 0;
+  }
+
+  .learn-menu-card strong {
+    margin-bottom: 2px;
+  }
+
+  .learn-menu-card > span:last-child {
+    grid-column: 2;
+  }
+
+  .learn-filter {
+    margin-left: -2px;
+    margin-right: -2px;
+  }
+
+  .lesson-flow-item {
+    width: 100%;
+  }
+}
