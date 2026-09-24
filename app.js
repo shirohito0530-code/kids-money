@@ -2,20 +2,30 @@
 
 /*
 ============================================================
-こどもマネー・ラボ V2.1
+こどもマネー・ラボ V2.2
 ============================================================
 
-重要：
-・V1からのデータ移行はしません
-・LocalStorageを利用します
-・インデックス取得に失敗してもアプリ本体は動きます
-・GitHub Pages / iPhone Safariを想定
+V2.2 変更点
+
+・V1/V2.1からのデータ移行はしない
+・LocalStorageを利用
+・市場データは GitHub Pages から market.json を取得
+・Yahoo Financeへスマホから直接アクセスしない
+・入金ごとに、その日の指数を使って投資口数を計算
+・出金時は、その日の指数で口数を売却
+・現在価値 = 保有口数 × 最新指数
+・指数データ取得失敗時もアプリ本体は利用可能
+・iPhone Safari / GitHub Pages対応
+・こどもモード対応
 */
 
-const STORAGE_KEY = "kidsMoneyLabV21";
-const MARKET_KEY = "kidsMoneyMarketV21";
+const STORAGE_KEY = "kidsMoneyLabV22";
+const MARKET_KEY = "kidsMoneyMarketV22";
 
-const APP_VERSION = 21;
+const APP_VERSION = 22;
+
+const MARKET_DATA_URL =
+  "./data/market.json";
 
 
 /* ============================================================
@@ -29,7 +39,8 @@ const ASSETS = {
     kidName: "ためる",
     icon: "🏦",
     fixedRate: 0.002,
-    risk: "小"
+    risk: "小",
+    type: "cash"
   },
 
   world: {
@@ -37,7 +48,9 @@ const ASSETS = {
     kidName: "せかいの かぶ",
     icon: "🌎",
     fixedRate: 0.055,
-    risk: "大"
+    risk: "大",
+    type: "index",
+    marketKey: "world"
   },
 
   sp: {
@@ -45,7 +58,9 @@ const ASSETS = {
     kidName: "アメリカの かぶ",
     icon: "🇺🇸",
     fixedRate: 0.06,
-    risk: "大"
+    risk: "大",
+    type: "index",
+    marketKey: "sp"
   }
 
 };
@@ -58,16 +73,21 @@ const ASSETS = {
 let state = null;
 
 let marketState = {
-  world: null,
-  sp: null,
+  version: 2,
   updated: null,
-  source: "none"
+  source: "none",
+  markets: {
+    world: null,
+    sp: null
+  }
 };
 
 let selectedChildId = null;
 
 let kidMode =
-  localStorage.getItem("kidsMoneyKidMode") === "1";
+  localStorage.getItem(
+    "kidsMoneyKidMode"
+  ) === "1";
 
 
 /* ============================================================
@@ -87,16 +107,22 @@ function createId() {
 
   if (
     window.crypto &&
-    typeof window.crypto.randomUUID === "function"
+    typeof window.crypto.randomUUID ===
+      "function"
   ) {
+
     return window.crypto.randomUUID();
+
   }
 
   return (
     Date.now().toString(36) +
     "-" +
-    Math.random().toString(36).slice(2)
+    Math.random()
+      .toString(36)
+      .slice(2)
   );
+
 }
 
 
@@ -106,24 +132,43 @@ function createId() {
 
 function yen(value) {
 
-  const n = Number(value) || 0;
+  const n =
+    Number(value) || 0;
 
   return (
     "¥" +
-    Math.round(n).toLocaleString("ja-JP")
+    Math.round(n)
+      .toLocaleString("ja-JP")
   );
+
 }
 
 
 function signedYen(value) {
 
-  const n = Number(value) || 0;
+  const n =
+    Number(value) || 0;
 
   if (n >= 0) {
     return "+" + yen(n);
   }
 
   return "-" + yen(Math.abs(n));
+
+}
+
+
+function percent(value) {
+
+  const n =
+    Number(value) || 0;
+
+  return (
+    (n >= 0 ? "+" : "") +
+    n.toFixed(2) +
+    "%"
+  );
+
 }
 
 
@@ -135,6 +180,7 @@ function escapeHtml(value) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+
 }
 
 
@@ -144,7 +190,16 @@ function escapeHtml(value) {
 
 function today() {
 
-  return new Date()
+  const now = new Date();
+
+  const local =
+    new Date(
+      now.getTime() -
+      now.getTimezoneOffset() *
+        60000
+    );
+
+  return local
     .toISOString()
     .slice(0, 10);
 
@@ -157,23 +212,40 @@ function today() {
 
 function showError(message) {
 
-  const box = $("errorBox");
+  const box =
+    $("errorBox");
 
   if (!box) {
+
     console.error(message);
+
     return;
+
   }
 
-  box.textContent = message;
-  box.classList.remove("hidden");
+  box.textContent =
+    message;
 
-  clearTimeout(showError.timer);
+  box.classList.remove(
+    "hidden"
+  );
 
-  showError.timer = setTimeout(() => {
-    box.classList.add("hidden");
-  }, 5000);
+  clearTimeout(
+    showError.timer
+  );
+
+  showError.timer =
+    setTimeout(
+      () => {
+        box.classList.add(
+          "hidden"
+        );
+      },
+      5000
+    );
 
   console.error(message);
+
 }
 
 
@@ -185,20 +257,27 @@ function createDefaultState() {
 
   return {
 
-    version: APP_VERSION,
+    version:
+      APP_VERSION,
 
     children: [
 
       {
-        id: createId(),
 
-        name: "こどもA",
+        id:
+          createId(),
 
-        birthYear: 2019,
+        name:
+          "こどもA",
 
-        transactions: [],
+        birthYear:
+          2019,
 
-        goals: []
+        transactions:
+          [],
+
+        goals:
+          []
 
       }
 
@@ -210,7 +289,7 @@ function createDefaultState() {
 
 
 /* ============================================================
-   LOAD / SAVE
+   LOAD / SAVE STATE
 ============================================================ */
 
 function loadState() {
@@ -218,10 +297,14 @@ function loadState() {
   try {
 
     const raw =
-      localStorage.getItem(STORAGE_KEY);
+      localStorage.getItem(
+        STORAGE_KEY
+      );
 
     if (!raw) {
+
       return createDefaultState();
+
     }
 
     const parsed =
@@ -229,9 +312,13 @@ function loadState() {
 
     if (
       !parsed ||
-      !Array.isArray(parsed.children)
+      !Array.isArray(
+        parsed.children
+      )
     ) {
+
       return createDefaultState();
+
     }
 
     return parsed;
@@ -268,35 +355,64 @@ function saveState() {
 
 
 /* ============================================================
-   MARKET
+   LOAD / SAVE MARKET
 ============================================================ */
+
+function emptyMarketState() {
+
+  return {
+
+    version: 2,
+
+    updated: null,
+
+    source: "none",
+
+    markets: {
+
+      world: null,
+
+      sp: null
+
+    }
+
+  };
+
+}
+
 
 function loadMarket() {
 
   try {
 
     const raw =
-      localStorage.getItem(MARKET_KEY);
+      localStorage.getItem(
+        MARKET_KEY
+      );
 
     if (!raw) {
-      return {
-        world: null,
-        sp: null,
-        updated: null,
-        source: "none"
-      };
+
+      return emptyMarketState();
+
     }
 
-    return JSON.parse(raw);
+    const parsed =
+      JSON.parse(raw);
+
+    if (
+      !parsed ||
+      typeof parsed !== "object"
+    ) {
+
+      return emptyMarketState();
+
+    }
+
+    return parsed;
 
   } catch {
 
-    return {
-      world: null,
-      sp: null,
-      updated: null,
-      source: "none"
-    };
+    return emptyMarketState();
 
   }
 
@@ -309,7 +425,9 @@ function saveMarket() {
 
     localStorage.setItem(
       MARKET_KEY,
-      JSON.stringify(marketState)
+      JSON.stringify(
+        marketState
+      )
     );
 
   } catch (error) {
@@ -327,164 +445,607 @@ function saveMarket() {
 
 function getCurrentChild() {
 
-  if (!state || !state.children.length) {
+  if (
+    !state ||
+    !Array.isArray(
+      state.children
+    ) ||
+    !state.children.length
+  ) {
+
     return null;
+
   }
 
   return (
+
     state.children.find(
-      child => child.id === selectedChildId
+      child =>
+        child.id ===
+        selectedChildId
     ) ||
+
     state.children[0]
+
   );
 
 }
 
 
 /* ============================================================
-   CALCULATION
+   MARKET DATA
 ============================================================ */
 
-function calculateChild(child) {
+function getMarket(
+  assetKey
+) {
 
-  const balances = {
-    cash: 0,
-    world: 0,
-    sp: 0
+  const asset =
+    ASSETS[assetKey];
+
+  if (
+    !asset ||
+    asset.type !== "index"
+  ) {
+
+    return null;
+
+  }
+
+  return (
+    marketState
+      ?.markets
+      ?.[
+        asset.marketKey
+      ] || null
+  );
+
+}
+
+
+function getLatestIndexValue(
+  assetKey
+) {
+
+  const market =
+    getMarket(assetKey);
+
+  if (
+    !market ||
+    !Array.isArray(
+      market.series
+    ) ||
+    !market.series.length
+  ) {
+
+    return null;
+
+  }
+
+  const latest =
+    market.series[
+      market.series.length - 1
+    ];
+
+  const value =
+    Number(
+      latest?.value
+    );
+
+  return value > 0
+    ? value
+    : null;
+
+}
+
+
+function getIndexValue(
+  assetKey,
+  date
+) {
+
+  const market =
+    getMarket(assetKey);
+
+  if (
+    !market ||
+    !Array.isArray(
+      market.series
+    ) ||
+    !market.series.length
+  ) {
+
+    return null;
+
+  }
+
+  let result = null;
+
+  for (
+    const item
+    of market.series
+  ) {
+
+    if (
+      String(item.date) <=
+      String(date)
+    ) {
+
+      const value =
+        Number(item.value);
+
+      if (value > 0) {
+
+        result = value;
+
+      }
+
+    } else {
+
+      break;
+
+    }
+
+  }
+
+  return result;
+
+}
+
+
+/* ============================================================
+   INDEX RETURN
+============================================================ */
+
+function getIndexReturn(
+  assetKey,
+  date
+) {
+
+  const current =
+    getLatestIndexValue(
+      assetKey
+    );
+
+  const historical =
+    getIndexValue(
+      assetKey,
+      date
+    );
+
+  if (
+    !current ||
+    !historical
+  ) {
+
+    return null;
+
+  }
+
+  return (
+    current /
+      historical -
+    1
+  ) * 100;
+
+}
+
+
+/* ============================================================
+   INVESTMENT CALCULATION
+============================================================ */
+
+/*
+  V2.2では「口数」を内部的に管理する。
+
+  例：
+
+  指数100のとき
+  10,000円入金
+
+  10,000 / 100
+  = 100口
+
+  指数110になったら
+
+  100口 × 110
+  = 11,000円
+
+  出金5,500円の場合
+
+  5,500 / 110
+  = 50口売却
+
+  残り50口
+  × 110
+  = 5,500円
+*/
+
+
+function calculateInvestment(
+  child,
+  assetKey
+) {
+
+  const result = {
+
+    units: 0,
+
+    principal: 0,
+
+    value: 0,
+
+    pnl: 0,
+
+    latestIndex: null,
+
+    transactions: []
+
   };
 
-  let totalIn = 0;
-  let totalOut = 0;
-
-  let worldPrincipal = 0;
-  let spPrincipal = 0;
 
   if (!child) {
 
-    return {
-      balances,
-      totalIn: 0,
-      totalOut: 0,
-      principal: 0,
-      investmentValue: 0,
-      total: 0,
-      worldValue: 0,
-      spValue: 0,
-      pnl: 0
-    };
+    return result;
 
   }
 
 
   const transactions =
-    Array.isArray(child.transactions)
-      ? child.transactions
+    Array.isArray(
+      child.transactions
+    )
+      ? [
+          ...child.transactions
+        ]
       : [];
 
 
-  for (const tx of transactions) {
+  const investmentTransactions =
+    transactions
+      .filter(
+        tx =>
+          tx.asset ===
+          assetKey
+      )
+      .sort(
+        (a, b) =>
+          String(a.date)
+            .localeCompare(
+              String(b.date)
+            )
+      );
+
+
+  for (
+    const tx
+    of investmentTransactions
+  ) {
 
     const amount =
       Number(tx.amount) || 0;
 
-    const asset =
-      ASSETS[tx.asset]
-        ? tx.asset
-        : "cash";
+    if (
+      amount <= 0
+    ) {
+
+      continue;
+
+    }
 
 
-    if (tx.type === "out") {
+    const index =
+      getIndexValue(
+        assetKey,
+        tx.date
+      );
 
-      balances[asset] =
+
+    /*
+      過去指数が取得できない場合は、
+      その取引を元本計算だけに利用。
+    */
+
+    if (
+      !index ||
+      index <= 0
+    ) {
+
+      if (
+        tx.type === "in"
+      ) {
+
+        result.principal +=
+          amount;
+
+      } else {
+
+        result.principal =
+          Math.max(
+            0,
+            result.principal -
+              amount
+          );
+
+      }
+
+      continue;
+
+    }
+
+
+    if (
+      tx.type === "out"
+    ) {
+
+      const sellUnits =
+        amount / index;
+
+      result.units =
         Math.max(
           0,
-          balances[asset] - amount
+          result.units -
+            sellUnits
         );
 
-      totalOut += amount;
+      result.principal =
+        Math.max(
+          0,
+          result.principal -
+            amount
+        );
 
     } else {
 
-      balances[asset] += amount;
+      const buyUnits =
+        amount / index;
 
-      totalIn += amount;
+      result.units +=
+        buyUnits;
 
-      if (asset === "world") {
-        worldPrincipal += amount;
-      }
-
-      if (asset === "sp") {
-        spPrincipal += amount;
-      }
+      result.principal +=
+        amount;
 
     }
 
   }
 
 
-  let worldValue =
-    worldPrincipal;
+  const latest =
+    getLatestIndexValue(
+      assetKey
+    );
 
-  let spValue =
-    spPrincipal;
 
+  result.latestIndex =
+    latest;
 
-  /*
-  インデックス取得成功時
-  ------------------------------------
-  元本 × 現在指数 / 基準指数
-  ------------------------------------
-  */
 
   if (
-    marketState.world &&
-    Number(marketState.world.baseIndex) > 0 &&
-    Number(marketState.world.indexValue) > 0
+    latest &&
+    latest > 0
   ) {
 
-    worldValue =
-      worldPrincipal *
-      marketState.world.indexValue /
-      marketState.world.baseIndex;
+    result.value =
+      result.units *
+      latest;
+
+  } else {
+
+    /*
+      市場データが取得できない場合は
+      安全側として元本を表示。
+    */
+
+    result.value =
+      result.principal;
 
   }
 
 
-  if (
-    marketState.sp &&
-    Number(marketState.sp.baseIndex) > 0 &&
-    Number(marketState.sp.indexValue) > 0
-  ) {
+  result.pnl =
+    result.value -
+    result.principal;
 
-    spValue =
-      spPrincipal *
-      marketState.sp.indexValue /
-      marketState.sp.baseIndex;
+
+  result.transactions =
+    investmentTransactions;
+
+
+  return result;
+
+}
+
+
+/* ============================================================
+   CASH CALCULATION
+============================================================ */
+
+function calculateCash(
+  child
+) {
+
+  let balance = 0;
+
+  if (!child) {
+
+    return 0;
 
   }
+
+  for (
+    const tx
+    of child.transactions || []
+  ) {
+
+    const amount =
+      Number(tx.amount) || 0;
+
+    if (
+      tx.asset !== "cash"
+    ) {
+
+      continue;
+
+    }
+
+    if (
+      tx.type === "out"
+    ) {
+
+      balance =
+        Math.max(
+          0,
+          balance -
+            amount
+        );
+
+    } else {
+
+      balance +=
+        amount;
+
+    }
+
+  }
+
+  return balance;
+
+}
+
+
+/* ============================================================
+   CALCULATE CHILD
+============================================================ */
+
+function calculateChild(
+  child
+) {
+
+  if (!child) {
+
+    return {
+
+      balances: {
+
+        cash: 0,
+
+        world: 0,
+
+        sp: 0
+
+      },
+
+      totalIn: 0,
+
+      totalOut: 0,
+
+      principal: 0,
+
+      investmentValue: 0,
+
+      total: 0,
+
+      worldValue: 0,
+
+      spValue: 0,
+
+      worldPrincipal: 0,
+
+      spPrincipal: 0,
+
+      pnl: 0
+
+    };
+
+  }
+
+
+  let totalIn = 0;
+
+  let totalOut = 0;
+
+
+  for (
+    const tx
+    of child.transactions || []
+  ) {
+
+    const amount =
+      Number(tx.amount) || 0;
+
+    if (
+      tx.type === "out"
+    ) {
+
+      totalOut +=
+        amount;
+
+    } else {
+
+      totalIn +=
+        amount;
+
+    }
+
+  }
+
+
+  const cash =
+    calculateCash(
+      child
+    );
+
+
+  const world =
+    calculateInvestment(
+      child,
+      "world"
+    );
+
+
+  const sp =
+    calculateInvestment(
+      child,
+      "sp"
+    );
 
 
   const investmentValue =
-    worldValue + spValue;
+    world.value +
+    sp.value;
 
-  const total =
-    balances.cash +
-    investmentValue;
 
   const principal =
-    balances.cash +
-    worldPrincipal +
-    spPrincipal;
+    cash +
+    world.principal +
+    sp.principal;
+
+
+  const total =
+    cash +
+    investmentValue;
+
 
   const pnl =
     investmentValue -
-    worldPrincipal -
-    spPrincipal;
+    world.principal -
+    sp.principal;
 
 
   return {
 
-    balances,
+    balances: {
+
+      cash,
+
+      world:
+        world.value,
+
+      sp:
+        sp.value
+
+    },
 
     totalIn,
 
@@ -496,9 +1057,17 @@ function calculateChild(child) {
 
     total,
 
-    worldValue,
+    worldValue:
+      world.value,
 
-    spValue,
+    spValue:
+      sp.value,
+
+    worldPrincipal:
+      world.principal,
+
+    spPrincipal:
+      sp.principal,
 
     pnl
 
@@ -508,7 +1077,7 @@ function calculateChild(child) {
 
 
 /* ============================================================
-   RENDER CHILD SELECTOR
+   CHILD SELECTOR
 ============================================================ */
 
 function renderChildSelector() {
@@ -517,34 +1086,48 @@ function renderChildSelector() {
     $("child");
 
   if (!select) {
-    return;
-  }
 
+    return;
+
+  }
 
   select.innerHTML = "";
 
 
-  for (const child of state.children) {
+  for (
+    const child
+    of state.children
+  ) {
 
     const option =
-      document.createElement("option");
+      document.createElement(
+        "option"
+      );
 
-    option.value = child.id;
-    option.textContent = child.name;
+    option.value =
+      child.id;
 
-    select.appendChild(option);
+    option.textContent =
+      child.name;
+
+    select.appendChild(
+      option
+    );
 
   }
 
 
   if (
     !state.children.some(
-      child => child.id === selectedChildId
+      child =>
+        child.id ===
+        selectedChildId
     )
   ) {
 
     selectedChildId =
-      state.children[0]?.id || null;
+      state.children[0]
+        ?.id || null;
 
   }
 
@@ -559,13 +1142,17 @@ function renderChildSelector() {
    ASSET LABEL
 ============================================================ */
 
-function assetName(assetKey) {
+function assetName(
+  assetKey
+) {
 
   const asset =
     ASSETS[assetKey];
 
   if (!asset) {
+
     return assetKey;
+
   }
 
   return kidMode
@@ -576,7 +1163,7 @@ function assetName(assetKey) {
 
 
 /* ============================================================
-   RENDER SUMMARY
+   SUMMARY
 ============================================================ */
 
 function renderSummary() {
@@ -585,26 +1172,38 @@ function renderSummary() {
     getCurrentChild();
 
   const result =
-    calculateChild(child);
+    calculateChild(
+      child
+    );
 
 
   $("total").textContent =
     yen(result.total);
 
   $("cash").textContent =
-    yen(result.balances.cash);
+    yen(
+      result.balances.cash
+    );
 
   $("invest").textContent =
-    yen(result.investmentValue);
+    yen(
+      result.investmentValue
+    );
 
   $("ins").textContent =
-    yen(result.totalIn);
+    yen(
+      result.totalIn
+    );
 
   $("outs").textContent =
-    yen(result.totalOut);
+    yen(
+      result.totalOut
+    );
 
   $("pnl").textContent =
-    signedYen(result.pnl);
+    signedYen(
+      result.pnl
+    );
 
 
   if (kidMode) {
@@ -634,7 +1233,9 @@ function renderSummary() {
 
     $("note").textContent =
       "投資損益 " +
-      signedYen(result.pnl);
+      signedYen(
+        result.pnl
+      );
 
   }
 
@@ -642,7 +1243,7 @@ function renderSummary() {
 
 
 /* ============================================================
-   RENDER ASSETS
+   ASSET CARDS
 ============================================================ */
 
 function renderAssets() {
@@ -651,78 +1252,92 @@ function renderAssets() {
     getCurrentChild();
 
   const result =
-    calculateChild(child);
+    calculateChild(
+      child
+    );
 
   const container =
     $("assets");
 
-
   if (!container) {
-    return;
-  }
 
+    return;
+
+  }
 
   container.innerHTML = "";
 
 
   for (
     const [key, asset]
-    of Object.entries(ASSETS)
+    of Object.entries(
+      ASSETS
+    )
   ) {
 
     let value = 0;
+
     let principal = 0;
 
-    if (key === "cash") {
+
+    if (
+      key === "cash"
+    ) {
 
       value =
         result.balances.cash;
 
-    } else if (key === "world") {
+    } else if (
+      key === "world"
+    ) {
 
       value =
         result.worldValue;
 
       principal =
-        calculatePrincipal(
-          child,
-          key
-        );
+        result.worldPrincipal;
 
-    } else if (key === "sp") {
+    } else if (
+      key === "sp"
+    ) {
 
       value =
         result.spValue;
 
       principal =
-        calculatePrincipal(
-          child,
-          key
-        );
+        result.spPrincipal;
 
     }
 
 
     const card =
-      document.createElement("article");
+      document.createElement(
+        "article"
+      );
 
-    card.className = "asset";
+    card.className =
+      "asset";
 
 
     const riskText =
       kidMode
+
         ? (
           asset.risk === "小"
             ? "へりにくい"
             : "へることもある"
         )
-        : "リスク：" + asset.risk;
+
+        : "リスク：" +
+          asset.risk;
 
 
     let meta = "";
 
 
-    if (key === "cash") {
+    if (
+      key === "cash"
+    ) {
 
       meta =
         kidMode
@@ -732,25 +1347,59 @@ function renderAssets() {
     } else {
 
       const pnl =
-        value - principal;
+        value -
+        principal;
+
+
+      const indexReturn =
+        getIndexReturn(
+          key,
+          getLatestInvestmentDate(
+            child,
+            key
+          )
+        );
+
 
       meta =
         kidMode
+
           ? (
             "いれた おかね " +
             yen(principal) +
             " · " +
-            (pnl >= 0
-              ? "ふえた "
-              : "へった ") +
-            yen(Math.abs(pnl))
+            (
+              pnl >= 0
+                ? "ふえた "
+                : "へった "
+            ) +
+            yen(
+              Math.abs(pnl)
+            )
           )
+
           : (
             "元本 " +
             yen(principal) +
             " · 損益 " +
             signedYen(pnl)
           );
+
+
+      if (
+        indexReturn !== null &&
+        Number.isFinite(
+          indexReturn
+        )
+      ) {
+
+        meta +=
+          " · 指数 " +
+          percent(
+            indexReturn
+          );
+
+      }
 
     }
 
@@ -771,9 +1420,7 @@ function renderAssets() {
 
       <h3>
         ${escapeHtml(
-          kidMode
-            ? asset.kidName
-            : asset.name
+          assetName(key)
         )}
       </h3>
 
@@ -788,12 +1435,57 @@ function renderAssets() {
     `;
 
 
-    container.appendChild(card);
+    container.appendChild(
+      card
+    );
 
   }
 
 }
 
+
+/* ============================================================
+   LATEST INVESTMENT DATE
+============================================================ */
+
+function getLatestInvestmentDate(
+  child,
+  assetKey
+) {
+
+  if (!child) {
+
+    return today();
+
+  }
+
+  const dates =
+    (child.transactions || [])
+      .filter(
+        tx =>
+          tx.asset ===
+          assetKey &&
+          tx.type ===
+          "in"
+      )
+      .map(
+        tx =>
+          String(tx.date)
+      )
+      .sort();
+
+
+  return (
+    dates[0] ||
+    today()
+  );
+
+}
+
+
+/* ============================================================
+   PRINCIPAL
+============================================================ */
 
 function calculatePrincipal(
   child,
@@ -801,7 +1493,9 @@ function calculatePrincipal(
 ) {
 
   if (!child) {
+
     return 0;
+
   }
 
   let value = 0;
@@ -813,25 +1507,34 @@ function calculatePrincipal(
   ) {
 
     if (
-      tx.asset !== assetKey
+      tx.asset !==
+      assetKey
     ) {
+
       continue;
+
     }
+
 
     const amount =
       Number(tx.amount) || 0;
 
-    if (tx.type === "out") {
+
+    if (
+      tx.type === "out"
+    ) {
 
       value =
         Math.max(
           0,
-          value - amount
+          value -
+            amount
         );
 
     } else {
 
-      value += amount;
+      value +=
+        amount;
 
     }
 
@@ -844,7 +1547,7 @@ function calculatePrincipal(
 
 
 /* ============================================================
-   RENDER TRANSACTIONS
+   TRANSACTION FILTER
 ============================================================ */
 
 function renderAssetFilter() {
@@ -853,57 +1556,84 @@ function renderAssetFilter() {
     $("af");
 
   if (!select) {
+
     return;
+
   }
 
 
   const current =
-    select.value || "all";
+    select.value ||
+    "all";
 
 
   select.innerHTML = "";
 
 
   const all =
-    document.createElement("option");
+    document.createElement(
+      "option"
+    );
 
-  all.value = "all";
-  all.textContent = "すべて";
+  all.value =
+    "all";
 
-  select.appendChild(all);
+  all.textContent =
+    "すべて";
+
+  select.appendChild(
+    all
+  );
 
 
   for (
     const [key, asset]
-    of Object.entries(ASSETS)
+    of Object.entries(
+      ASSETS
+    )
   ) {
 
     const option =
-      document.createElement("option");
+      document.createElement(
+        "option"
+      );
 
-    option.value = key;
+    option.value =
+      key;
 
     option.textContent =
       asset.icon +
       " " +
       assetName(key);
 
-    select.appendChild(option);
+    select.appendChild(
+      option
+    );
 
   }
 
 
   if (
-    Array.from(select.options)
-      .some(option => option.value === current)
+    Array.from(
+      select.options
+    ).some(
+      option =>
+        option.value ===
+        current
+    )
   ) {
 
-    select.value = current;
+    select.value =
+      current;
 
   }
 
 }
 
+
+/* ============================================================
+   TRANSACTIONS
+============================================================ */
 
 function renderTransactions() {
 
@@ -914,7 +1644,9 @@ function renderTransactions() {
     $("txs");
 
   if (!container) {
+
     return;
+
   }
 
 
@@ -926,24 +1658,37 @@ function renderTransactions() {
 
 
   let transactions =
-    [...(child?.transactions || [])];
+    [
+      ...(child?.transactions ||
+        [])
+    ];
 
 
-  if (typeFilter !== "all") {
+  if (
+    typeFilter !==
+    "all"
+  ) {
 
     transactions =
       transactions.filter(
-        tx => tx.type === typeFilter
+        tx =>
+          tx.type ===
+          typeFilter
       );
 
   }
 
 
-  if (assetFilter !== "all") {
+  if (
+    assetFilter !==
+    "all"
+  ) {
 
     transactions =
       transactions.filter(
-        tx => tx.asset === assetFilter
+        tx =>
+          tx.asset ===
+          assetFilter
       );
 
   }
@@ -958,14 +1703,20 @@ function renderTransactions() {
   );
 
 
-  if (!transactions.length) {
+  if (
+    !transactions.length
+  ) {
 
     container.innerHTML = `
 
       <div class="card muted">
-        ${kidMode
-          ? "まだ きろくが ありません。"
-          : "取引履歴がありません。"}
+
+        ${
+          kidMode
+            ? "まだ きろくが ありません。"
+            : "取引履歴がありません。"
+        }
+
       </div>
 
     `;
@@ -978,12 +1729,18 @@ function renderTransactions() {
   container.innerHTML = "";
 
 
-  for (const tx of transactions) {
+  for (
+    const tx
+    of transactions
+  ) {
 
     const card =
-      document.createElement("div");
+      document.createElement(
+        "div"
+      );
 
-    card.className = "card";
+    card.className =
+      "card";
 
 
     const sign =
@@ -992,38 +1749,100 @@ function renderTransactions() {
         : "−";
 
 
-    const typeText =
-      tx.type === "in"
-        ? "いれた"
-        : "つかった";
+    const marketIndex =
+      tx.asset === "world" ||
+      tx.asset === "sp"
+        ? getIndexValue(
+            tx.asset,
+            tx.date
+          )
+        : null;
+
+
+    let indexInfo = "";
+
+
+    if (
+      marketIndex
+    ) {
+
+      indexInfo = `
+
+        <div class="meta">
+
+          ${
+            tx.type === "in"
+              ? "いれたとき"
+              : "つかったとき"
+          }
+          の指数：
+          ${marketIndex.toLocaleString()}
+
+        </div>
+
+      `;
+
+    }
 
 
     card.innerHTML = `
 
       <strong>
-        ${escapeHtml(tx.date)}
+
+        ${escapeHtml(
+          tx.date
+        )}
+
         ·
-        ${sign}${yen(tx.amount)}
+
+        ${sign}${yen(
+          tx.amount
+        )}
+
       </strong>
 
       <div>
-        ${escapeHtml(tx.reason || "")}
+
+        ${escapeHtml(
+          tx.reason || ""
+        )}
+
         ·
-        ${ASSETS[tx.asset]?.icon || "💰"}
-        ${escapeHtml(assetName(tx.asset))}
+
+        ${
+          ASSETS[
+            tx.asset
+          ]?.icon || "💰"
+        }
+
+        ${escapeHtml(
+          assetName(
+            tx.asset
+          )
+        )}
+
       </div>
+
+      ${indexInfo}
 
       ${
         tx.memo
-          ? `<div class="meta">
-              ${escapeHtml(tx.memo)}
-             </div>`
+          ? `
+            <div class="meta">
+              ${escapeHtml(
+                tx.memo
+              )}
+            </div>
+          `
           : ""
       }
 
     `;
 
-    container.appendChild(card);
+
+    container.appendChild(
+      card
+    );
 
   }
 
@@ -1031,7 +1850,7 @@ function renderTransactions() {
 
 
 /* ============================================================
-   RENDER MARKET
+   MARKET RENDER
 ============================================================ */
 
 function renderMarket() {
@@ -1040,7 +1859,9 @@ function renderMarket() {
     $("market");
 
   if (!container) {
+
     return;
+
   }
 
 
@@ -1070,19 +1891,35 @@ function renderMarket() {
   ];
 
 
-  for (const item of markets) {
+  for (
+    const item
+    of markets
+  ) {
 
     const data =
-      marketState[item.key];
+      marketState
+        ?.markets
+        ?.[
+          item.key
+        ];
 
 
     const card =
-      document.createElement("div");
+      document.createElement(
+        "div"
+      );
 
-    card.className = "market";
+    card.className =
+      "market";
 
 
-    if (!data) {
+    if (
+      !data ||
+      !Array.isArray(
+        data.series
+      ) ||
+      !data.series.length
+    ) {
 
       card.innerHTML = `
 
@@ -1107,8 +1944,21 @@ function renderMarket() {
 
     } else {
 
+      const latest =
+        data.series[
+          data.series.length - 1
+        ];
+
+      const value =
+        Number(
+          latest.value
+        );
+
+
       const change =
-        Number(data.change) || 0;
+        Number(
+          data.change
+        ) || 0;
 
 
       card.innerHTML = `
@@ -1126,18 +1976,31 @@ function renderMarket() {
               : "down"
           }">
 
-            ${
-              change >= 0
-                ? "+"
-                : ""
-            }${change.toFixed(2)}%
+            ${percent(change)}
 
           </span>
 
         </div>
 
         <div class="price">
-          ${Number(data.indexValue).toLocaleString()}
+
+          ${
+            value.toLocaleString(
+              "ja-JP",
+              {
+                maximumFractionDigits: 2
+              }
+            )
+          }
+
+        </div>
+
+        <div class="meta">
+
+          ${
+            latest.date
+          }
+
         </div>
 
       `;
@@ -1145,7 +2008,9 @@ function renderMarket() {
     }
 
 
-    container.appendChild(card);
+    container.appendChild(
+      card
+    );
 
   }
 
@@ -1153,23 +2018,28 @@ function renderMarket() {
   const status =
     $("marketStatus");
 
-
   if (!status) {
+
     return;
+
   }
 
 
-  if (marketState.source === "live") {
-
-    status.textContent =
-      "指数データを 取得しました。";
-
-  } else if (
-    marketState.source === "fixed"
+  if (
+    marketState.source ===
+    "github"
   ) {
 
     status.textContent =
-      "指数を取得できないため、教育用の固定率で計算しています。";
+      "指数データを GitHub から読み込みました。";
+
+  } else if (
+    marketState.source ===
+    "cache"
+  ) {
+
+    status.textContent =
+      "保存していた指数データを表示しています。";
 
   } else {
 
@@ -1182,13 +2052,8 @@ function renderMarket() {
 
 
 /* ============================================================
-   INDEX FETCH
+   FETCH MARKET JSON
 ============================================================ */
-
-/*
-  Yahoo Financeの取得に失敗しても
-  アプリ全体を止めない。
-*/
 
 async function fetchMarketData() {
 
@@ -1206,91 +2071,48 @@ async function fetchMarketData() {
 
   try {
 
-    const [
-      worldResponse,
-      spResponse
-    ] = await Promise.all([
-
-      fetch(
-        "https://query1.finance.yahoo.com/v8/finance/chart/ACWI?range=5d&interval=1d",
+    const response =
+      await fetch(
+        MARKET_DATA_URL +
+          "?t=" +
+          Date.now(),
         {
           method: "GET",
           cache: "no-store"
         }
-      ),
-
-      fetch(
-        "https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?range=5d&interval=1d",
-        {
-          method: "GET",
-          cache: "no-store"
-        }
-      )
-
-    ]);
+      );
 
 
-    if (
-      !worldResponse.ok ||
-      !spResponse.ok
-    ) {
+    if (!response.ok) {
 
       throw new Error(
-        "market api response error"
+        "market.json response error"
       );
 
     }
 
 
-    const worldJson =
-      await worldResponse.json();
-
-    const spJson =
-      await spResponse.json();
+    const data =
+      await response.json();
 
 
-    const world =
-      parseYahooResult(
-        worldJson
-      );
-
-    const sp =
-      parseYahooResult(
-        spJson
-      );
-
-
-    /*
-      基準指数は最初に取得した値を維持。
-      これにより「最初にいれた時から
-      どれだけ指数が動いたか」を教育用に表現。
-    */
-
-    world.baseIndex =
-      marketState.world?.baseIndex ||
-      world.indexValue;
-
-
-    sp.baseIndex =
-      marketState.sp?.baseIndex ||
-      sp.indexValue;
+    validateMarketData(
+      data
+    );
 
 
     marketState = {
 
-      world,
-      sp,
-
-      updated:
-        new Date().toISOString(),
+      ...data,
 
       source:
-        "live"
+        "github"
 
     };
 
 
     saveMarket();
+
 
     renderAll();
 
@@ -1304,41 +2126,35 @@ async function fetchMarketData() {
 
 
     /*
-      API取得に失敗しても
-      家計機能は利用できるようにする。
+      すでに保存された市場データが
+      あれば、それを利用。
     */
 
-    marketState.source =
-      "fixed";
+    const cached =
+      loadMarket();
 
 
-    if (!marketState.world) {
+    if (
+      cached &&
+      cached.markets
+    ) {
 
-      marketState.world = {
+      marketState = {
 
-        indexValue: 100,
-        baseIndex: 100,
-        change: 0
+        ...cached,
 
-      };
-
-    }
-
-
-    if (!marketState.sp) {
-
-      marketState.sp = {
-
-        indexValue: 100,
-        baseIndex: 100,
-        change: 0
+        source:
+          "cache"
 
       };
 
+    } else {
+
+      marketState =
+        emptyMarketState();
+
     }
 
-
-    saveMarket();
 
     renderAll();
 
@@ -1346,7 +2162,7 @@ async function fetchMarketData() {
     if (status) {
 
       status.textContent =
-        "指数を取得できませんでした。教育用の固定率で動きます。";
+        "最新の指数を取得できませんでした。保存済みデータを使います。";
 
     }
 
@@ -1356,16 +2172,18 @@ async function fetchMarketData() {
 
 
 /* ============================================================
-   PARSE YAHOO
+   VALIDATE MARKET DATA
 ============================================================ */
 
-function parseYahooResult(json) {
+function validateMarketData(
+  data
+) {
 
-  const result =
-    json?.chart?.result?.[0];
-
-
-  if (!result) {
+  if (
+    !data ||
+    typeof data !==
+      "object"
+  ) {
 
     throw new Error(
       "invalid market data"
@@ -1374,59 +2192,58 @@ function parseYahooResult(json) {
   }
 
 
-  const closes =
-    result.indicators?.quote?.[0]?.close
-      ?.filter(
-        value =>
-          typeof value === "number"
-      );
-
-
   if (
-    !closes ||
-    !closes.length
+    !data.markets ||
+    typeof data.markets !==
+      "object"
   ) {
 
     throw new Error(
-      "no closing price"
+      "markets not found"
     );
 
   }
 
 
-  const current =
-    closes[closes.length - 1];
+  for (
+    const key
+    of ["world", "sp"]
+  ) {
 
-  const previous =
-    closes.length >= 2
-      ? closes[closes.length - 2]
-      : current;
+    const market =
+      data.markets[key];
+
+    if (!market) {
+
+      throw new Error(
+        key +
+        " market not found"
+      );
+
+    }
 
 
-  const change =
-    previous === 0
-      ? 0
-      : (
-        current / previous - 1
-      ) * 100;
+    if (
+      !Array.isArray(
+        market.series
+      ) ||
+      !market.series.length
+    ) {
 
+      throw new Error(
+        key +
+        " series not found"
+      );
 
-  return {
+    }
 
-    indexValue: current,
-
-    change,
-
-    updated:
-      new Date().toISOString()
-
-  };
+  }
 
 }
 
 
 /* ============================================================
-   RENDER GOALS
+   GOALS
 ============================================================ */
 
 function renderGoals() {
@@ -1437,10 +2254,14 @@ function renderGoals() {
   const container =
     $("goals");
 
-
   if (!container) {
+
     return;
+
   }
+
+
+  container.innerHTML = "";
 
 
   const goals =
@@ -1452,11 +2273,13 @@ function renderGoals() {
     container.innerHTML = `
 
       <div class="card muted">
+
         ${
           kidMode
-            ? "めあてを つくってみよう。"
-            : "目標を登録してみましょう。"
+            ? "まだ めあてが ありません。"
+            : "目標がありません。"
         }
+
       </div>
 
     `;
@@ -1466,51 +2289,75 @@ function renderGoals() {
   }
 
 
-  container.innerHTML = "";
+  const current =
+    calculateChild(
+      child
+    );
 
 
-  for (const goal of goals) {
+  const saved =
+    current.total;
+
+
+  for (
+    const goal
+    of goals
+  ) {
 
     const amount =
-      Number(goal.amount) || 0;
+      Number(
+        goal.amount
+      ) || 0;
 
-    const saved =
-      Number(goal.saved) || 0;
 
-
-    const percent =
+    const percentValue =
       amount > 0
         ? Math.min(
             100,
             Math.round(
-              saved / amount * 100
+              saved /
+                amount *
+                100
             )
           )
         : 0;
 
 
     const div =
-      document.createElement("div");
+      document.createElement(
+        "div"
+      );
 
-    div.className = "goal";
+    div.className =
+      "goal";
 
 
     div.innerHTML = `
 
       <h3>
-        ${escapeHtml(goal.name)}
+
+        ${escapeHtml(
+          goal.name
+        )}
+
       </h3>
 
       <div class="goal-meta">
 
         <span>
+
           ${yen(saved)}
           /
           ${yen(amount)}
+
         </span>
 
         <span>
-          ${escapeHtml(goal.date)}
+
+          ${escapeHtml(
+            goal.date
+          )}
+
         </span>
 
       </div>
@@ -1518,7 +2365,7 @@ function renderGoals() {
       <div class="goal-bar">
 
         <span
-          style="width:${percent}%"
+          style="width:${percentValue}%"
         ></span>
 
       </div>
@@ -1526,17 +2373,20 @@ function renderGoals() {
       <div class="goal-meta">
 
         <span>
-          ${percent}%
+          ${percentValue}%
         </span>
 
         <span>
+
           あと
           ${yen(
             Math.max(
               0,
-              amount - saved
+              amount -
+                saved
             )
           )}
+
         </span>
 
       </div>
@@ -1544,7 +2394,9 @@ function renderGoals() {
     `;
 
 
-    container.appendChild(div);
+    container.appendChild(
+      div
+    );
 
   }
 
@@ -1561,27 +2413,34 @@ function drawChart() {
     $("chart");
 
   if (!canvas) {
+
     return;
+
   }
 
 
   const context =
-    canvas.getContext("2d");
-
+    canvas.getContext(
+      "2d"
+    );
 
   if (!context) {
+
     return;
+
   }
 
 
   const width =
-    canvas.clientWidth || 600;
+    canvas.clientWidth ||
+    600;
 
   const height =
     220;
 
   const ratio =
-    window.devicePixelRatio || 1;
+    window.devicePixelRatio ||
+    1;
 
 
   canvas.width =
@@ -1609,13 +2468,6 @@ function drawChart() {
   );
 
 
-  context.fillStyle =
-    "#687386";
-
-  context.font =
-    "13px sans-serif";
-
-
   const child =
     getCurrentChild();
 
@@ -1624,6 +2476,12 @@ function drawChart() {
     !child ||
     !child.transactions?.length
   ) {
+
+    context.fillStyle =
+      "#687386";
+
+    context.font =
+      "13px sans-serif";
 
     context.fillText(
       kidMode
@@ -1638,19 +2496,16 @@ function drawChart() {
   }
 
 
-  /*
-    簡易残高推移
-  */
-
   const transactions =
-    [...child.transactions]
-      .sort(
-        (a, b) =>
-          String(a.date)
-            .localeCompare(
-              String(b.date)
-            )
-      );
+    [
+      ...child.transactions
+    ].sort(
+      (a, b) =>
+        String(a.date)
+          .localeCompare(
+            String(b.date)
+          )
+    );
 
 
   let balance = 0;
@@ -1658,42 +2513,66 @@ function drawChart() {
   const points = [];
 
 
-  for (const tx of transactions) {
+  for (
+    const tx
+    of transactions
+  ) {
 
     const amount =
       Number(tx.amount) || 0;
 
-    if (tx.type === "out") {
 
-      balance -= amount;
+    if (
+      tx.type === "out"
+    ) {
+
+      balance -=
+        amount;
 
     } else {
 
-      balance += amount;
+      balance +=
+        amount;
 
     }
 
-    points.push(balance);
+
+    points.push(
+      balance
+    );
 
   }
 
 
   if (!points.length) {
+
     return;
+
   }
 
 
   const max =
-    Math.max(...points, 1);
+    Math.max(
+      ...points,
+      1
+    );
 
   const min =
-    Math.min(...points, 0);
+    Math.min(
+      ...points,
+      0
+    );
 
 
   const left = 30;
-  const right = width - 15;
+
+  const right =
+    width - 15;
+
   const top = 20;
-  const bottom = height - 25;
+
+  const bottom =
+    height - 25;
 
 
   context.strokeStyle =
@@ -1714,30 +2593,41 @@ function drawChart() {
           index /
           Math.max(
             1,
-            points.length - 1
+            points.length -
+              1
           )
         ) *
-        (right - left);
+        (
+          right -
+          left
+        );
 
 
       const normalized =
         max === min
           ? 0.5
           : (
-            value - min
-          ) /
-          (
-            max - min
-          );
+              value -
+              min
+            ) /
+            (
+              max -
+              min
+            );
 
 
       const y =
         bottom -
         normalized *
-        (bottom - top);
+        (
+          bottom -
+          top
+        );
 
 
-      if (index === 0) {
+      if (
+        index === 0
+      ) {
 
         context.moveTo(
           x,
@@ -1766,8 +2656,13 @@ function drawChart() {
   context.font =
     "11px sans-serif";
 
+
   context.fillText(
-    yen(points[points.length - 1]),
+    yen(
+      points[
+        points.length - 1
+      ]
+    ),
     left,
     15
   );
@@ -1818,10 +2713,13 @@ function renderAll() {
    TRANSACTION MODAL
 ============================================================ */
 
-function openTransactionModal(type) {
+function openTransactionModal(
+  type
+) {
 
   $("txType").value =
     type;
+
 
   $("txTitle").textContent =
     type === "in"
@@ -1847,13 +2745,18 @@ function openTransactionModal(type) {
 
   for (
     const [key, asset]
-    of Object.entries(ASSETS)
+    of Object.entries(
+      ASSETS
+    )
   ) {
 
     const option =
-      document.createElement("option");
+      document.createElement(
+        "option"
+      );
 
-    option.value = key;
+    option.value =
+      key;
 
     option.textContent =
       asset.icon +
@@ -1868,7 +2771,8 @@ function openTransactionModal(type) {
 
 
   $("txModal")
-    .classList.remove("hidden");
+    .classList
+    .remove("hidden");
 
 }
 
@@ -1877,7 +2781,9 @@ function openTransactionModal(type) {
    CLOSE MODAL
 ============================================================ */
 
-function closeModal(id) {
+function closeModal(
+  id
+) {
 
   const modal =
     $(id);
@@ -1894,10 +2800,12 @@ function closeModal(id) {
 
 
 /* ============================================================
-   ADD TRANSACTION
+   TRANSACTION SUBMIT
 ============================================================ */
 
-function handleTransactionSubmit(event) {
+function handleTransactionSubmit(
+  event
+) {
 
   event.preventDefault();
 
@@ -1905,12 +2813,7 @@ function handleTransactionSubmit(event) {
   const child =
     getCurrentChild();
 
-
   if (!child) {
-
-    showError(
-      "子どもを選んでください。"
-    );
 
     return;
 
@@ -1945,17 +2848,30 @@ function handleTransactionSubmit(event) {
   }
 
 
-  const current =
-    calculateChild(child);
+  /*
+    出金可能額を確認。
+  */
 
+  if (
+    type === "out"
+  ) {
 
-  if (type === "out") {
+    const current =
+      calculateChild(
+        child
+      );
+
 
     const available =
-      current.balances[asset] || 0;
+      current.balances[
+        asset
+      ] || 0;
 
 
-    if (amount > available) {
+    if (
+      amount >
+      available + 0.0001
+    ) {
 
       alert(
         "のこっている おかねより おおきいよ。\n\n" +
@@ -1970,15 +2886,45 @@ function handleTransactionSubmit(event) {
   }
 
 
+  const date =
+    $("date").value ||
+    today();
+
+
+  /*
+    投資取引の場合、
+    その日の指数を記録しておく。
+
+    後から市場データが更新されても
+    「買った日の指数」が分かる。
+  */
+
+  let indexAtTransaction =
+    null;
+
+
+  if (
+    asset === "world" ||
+    asset === "sp"
+  ) {
+
+    indexAtTransaction =
+      getIndexValue(
+        asset,
+        date
+      );
+
+  }
+
+
   child.transactions.push({
 
-    id: createId(),
+    id:
+      createId(),
 
     type,
 
-    date:
-      $("date").value ||
-      today(),
+    date,
 
     amount,
 
@@ -1988,12 +2934,21 @@ function handleTransactionSubmit(event) {
     asset,
 
     memo:
-      $("memo").value.trim()
+      $("memo")
+        .value
+        .trim(),
+
+    indexAtTransaction,
+
+    createdAt:
+      new Date()
+        .toISOString()
 
   });
 
 
   saveState();
+
 
   closeModal(
     "txModal"
@@ -2009,7 +2964,9 @@ function handleTransactionSubmit(event) {
    ADD CHILD
 ============================================================ */
 
-function handleChildSubmit(event) {
+function handleChildSubmit(
+  event
+) {
 
   event.preventDefault();
 
@@ -2039,7 +2996,8 @@ function handleChildSubmit(event) {
 
   const child = {
 
-    id: createId(),
+    id:
+      createId(),
 
     name,
 
@@ -2063,12 +3021,14 @@ function handleChildSubmit(event) {
 
   saveState();
 
+
   closeModal(
     "childModal"
   );
 
 
   event.target.reset();
+
 
   renderAll();
 
@@ -2079,7 +3039,9 @@ function handleChildSubmit(event) {
    ADD GOAL
 ============================================================ */
 
-function handleGoalSubmit(event) {
+function handleGoalSubmit(
+  event
+) {
 
   event.preventDefault();
 
@@ -2089,7 +3051,9 @@ function handleGoalSubmit(event) {
 
 
   if (!child) {
+
     return;
+
   }
 
 
@@ -2130,9 +3094,19 @@ function handleGoalSubmit(event) {
   }
 
 
+  if (!Array.isArray(
+    child.goals
+  )) {
+
+    child.goals = [];
+
+  }
+
+
   child.goals.push({
 
-    id: createId(),
+    id:
+      createId(),
 
     name,
 
@@ -2147,12 +3121,14 @@ function handleGoalSubmit(event) {
 
   saveState();
 
+
   closeModal(
     "goalModal"
   );
 
 
   event.target.reset();
+
 
   renderAll();
 
@@ -2170,7 +3146,9 @@ function simulateFuture() {
 
 
   const current =
-    calculateChild(child);
+    calculateChild(
+      child
+    );
 
 
   const annual =
@@ -2207,7 +3185,7 @@ function simulateFuture() {
 
 
   const investRate =
-    0.055;
+    ASSETS.world.fixedRate;
 
 
   const initialCash =
@@ -2225,7 +3203,9 @@ function simulateFuture() {
     period
   ) {
 
-    if (rate === 0) {
+    if (
+      rate === 0
+    ) {
 
       return (
         principal +
@@ -2237,12 +3217,15 @@ function simulateFuture() {
 
 
     return (
+
       principal *
       Math.pow(
         1 + rate,
         period
       )
+
       +
+
       annualAmount *
       (
         Math.pow(
@@ -2251,6 +3234,7 @@ function simulateFuture() {
         ) - 1
       ) /
       rate
+
     );
 
   }
@@ -2259,7 +3243,8 @@ function simulateFuture() {
   const futureCash =
     futureValue(
       initialCash,
-      annual * saveRatio,
+      annual *
+        saveRatio,
       cashRate,
       years
     );
@@ -2268,7 +3253,8 @@ function simulateFuture() {
   const futureInvest =
     futureValue(
       initialInvest,
-      annual * investRatio,
+      annual *
+        investRatio,
       investRate,
       years
     );
@@ -2292,17 +3278,30 @@ function simulateFuture() {
       </div>
 
       <p class="muted">
+
         ${years}ねん後
         ·
-        ためる ${Math.round(saveRatio * 100)}%
+        ためる
+        ${Math.round(
+          saveRatio * 100
+        )}%
         /
-        ふやす ${Math.round(investRatio * 100)}%
+        ふやす
+        ${Math.round(
+          investRatio * 100
+        )}%
+
       </p>
 
       <p>
-        これは よそうの けいさんだよ。
+
+        これは よそうの
+        けいさんだよ。
+
         ほんとうの投資では、
-        ふえることも へることも あるよ。
+        ふえることも
+        へることも あるよ。
+
       </p>
 
     </div>
@@ -2325,7 +3324,8 @@ function updateRatioFromSave() {
 
 
   const invest =
-    100 - save;
+    100 -
+    save;
 
 
   $("investRatio").value =
@@ -2334,6 +3334,7 @@ function updateRatioFromSave() {
 
   $("sr").textContent =
     save + "%";
+
 
   $("ir").textContent =
     invest + "%";
@@ -2350,7 +3351,8 @@ function updateRatioFromInvest() {
 
 
   const save =
-    100 - invest;
+    100 -
+    invest;
 
 
   $("saveRatio").value =
@@ -2359,6 +3361,7 @@ function updateRatioFromInvest() {
 
   $("sr").textContent =
     save + "%";
+
 
   $("ir").textContent =
     invest + "%";
@@ -2377,7 +3380,9 @@ function updateCrash() {
 
 
   const result =
-    calculateChild(child);
+    calculateChild(
+      child
+    );
 
 
   const crash =
@@ -2386,29 +3391,57 @@ function updateCrash() {
     ) || 0;
 
 
-  $("crashL").textContent =
-    "-" + crash + "%";
+  const loss =
+    result.investmentValue *
+    crash /
+    100;
 
 
   const after =
-    result.balances.cash +
-    result.investmentValue *
-    (
-      1 -
-      crash / 100
-    );
+    result.total -
+    loss;
+
+
+  $("crashL").textContent =
+    "-" +
+    crash +
+    "%";
 
 
   $("crashBox").innerHTML = `
 
+    <div>
+
+      ${
+        kidMode
+          ? "とうしが へると…"
+          : "投資部分が下落すると…"
+      }
+
+    </div>
+
     <strong>
-      ${yen(result.total)}
-      →
+
       ${yen(after)}
+
     </strong>
 
     <div class="muted">
-      投資部分が ${crash}% 下がった場合
+
+      ${
+        kidMode
+          ? "いまより "
+          : "現在より "
+      }
+
+      ${yen(loss)}
+
+      ${
+        kidMode
+          ? " へるよ。"
+          : " 減少します。"
+      }
+
     </div>
 
   `;
@@ -2422,66 +3455,62 @@ function updateCrash() {
 
 function exportData() {
 
-  try {
+  const payload = {
 
-    const blob =
-      new Blob(
-        [
-          JSON.stringify(
-            state,
-            null,
-            2
-          )
-        ],
-        {
-          type:
-            "application/json"
-        }
-      );
+    version:
+      APP_VERSION,
+
+    exportedAt:
+      new Date()
+        .toISOString(),
+
+    children:
+      state.children
+
+  };
 
 
-    const url =
-      URL.createObjectURL(
-        blob
-      );
-
-
-    const link =
-      document.createElement("a");
-
-    link.href =
-      url;
-
-    link.download =
-      "kids-money-v21-backup.json";
-
-
-    document.body.appendChild(
-      link
+  const blob =
+    new Blob(
+      [
+        JSON.stringify(
+          payload,
+          null,
+          2
+        )
+      ],
+      {
+        type:
+          "application/json"
+      }
     );
 
 
-    link.click();
-
-
-    link.remove();
-
-
-    setTimeout(
-      () =>
-        URL.revokeObjectURL(
-          url
-        ),
-      1000
+  const url =
+    URL.createObjectURL(
+      blob
     );
 
-  } catch (error) {
 
-    showError(
-      "バックアップを作れませんでした。"
+  const anchor =
+    document.createElement(
+      "a"
     );
 
-  }
+
+  anchor.href =
+    url;
+
+  anchor.download =
+    "kids-money-v22.json";
+
+
+  anchor.click();
+
+
+  URL.revokeObjectURL(
+    url
+  );
 
 }
 
@@ -2490,14 +3519,18 @@ function exportData() {
    IMPORT
 ============================================================ */
 
-function importData(event) {
+function importData(
+  event
+) {
 
   const file =
     event.target.files?.[0];
 
 
   if (!file) {
+
     return;
+
   }
 
 
@@ -2529,16 +3562,24 @@ function importData(event) {
       }
 
 
-      state =
-        parsed;
+      state = {
+
+        version:
+          APP_VERSION,
+
+        children:
+          parsed.children
+
+      };
 
 
       selectedChildId =
-        state.children[0]?.id ||
-        null;
+        state.children[0]
+          ?.id || null;
 
 
       saveState();
+
 
       closeModal(
         "settingsModal"
@@ -2555,6 +3596,10 @@ function importData(event) {
 
     } catch (error) {
 
+      console.error(
+        error
+      );
+
       alert(
         "JSONが正しくありません。"
       );
@@ -2564,7 +3609,10 @@ function importData(event) {
   };
 
 
-  reader.readAsText(file);
+  reader.readAsText(
+    file
+  );
+
 
 }
 
@@ -2582,7 +3630,9 @@ function resetData() {
 
 
   if (!ok) {
+
     return;
+
   }
 
 
@@ -2596,10 +3646,12 @@ function resetData() {
 
 
   selectedChildId =
-    state.children[0].id;
+    state.children[0]
+      .id;
 
 
   saveState();
+
 
   renderAll();
 
@@ -2610,17 +3662,21 @@ function resetData() {
    TAB
 ============================================================ */
 
-function switchTab(tabName) {
+function switchTab(
+  tabName
+) {
 
   document
-    .querySelectorAll(".tab")
+    .querySelectorAll(
+      ".tab"
+    )
     .forEach(
       button => {
 
         button.classList.toggle(
           "active",
           button.dataset.tab ===
-          tabName
+            tabName
         );
 
       }
@@ -2628,24 +3684,25 @@ function switchTab(tabName) {
 
 
   document
-    .querySelectorAll(".panel")
+    .querySelectorAll(
+      ".panel"
+    )
     .forEach(
       panel => {
 
         panel.classList.toggle(
           "active",
-          panel.id === tabName
+          panel.id ===
+            tabName
         );
 
       }
     );
 
 
-  /*
-    タブ移動時に表示を更新
-  */
-
-  if (tabName === "home") {
+  if (
+    tabName === "home"
+  ) {
 
     drawChart();
 
@@ -2665,7 +3722,9 @@ function bindEvents() {
   */
 
   document
-    .querySelectorAll(".tab")
+    .querySelectorAll(
+      ".tab"
+    )
     .forEach(
       button => {
 
@@ -2712,7 +3771,9 @@ function bindEvents() {
       () =>
         $("childModal")
           .classList
-          .remove("hidden")
+          .remove(
+            "hidden"
+          )
     );
 
 
@@ -2726,7 +3787,9 @@ function bindEvents() {
       () =>
         $("settingsModal")
           .classList
-          .remove("hidden")
+          .remove(
+            "hidden"
+          )
     );
 
 
@@ -2793,9 +3856,8 @@ function bindEvents() {
     こどもモード
   */
 
-  $("kidMode")
-    .checked =
-      kidMode;
+  $("kidMode").checked =
+    kidMode;
 
 
   $("kidMode")
@@ -2809,7 +3871,9 @@ function bindEvents() {
 
         localStorage.setItem(
           "kidsMoneyKidMode",
-          kidMode ? "1" : "0"
+          kidMode
+            ? "1"
+            : "0"
         );
 
 
@@ -2851,7 +3915,9 @@ function bindEvents() {
       () =>
         $("goalModal")
           .classList
-          .remove("hidden")
+          .remove(
+            "hidden"
+          )
     );
 
 
@@ -2970,110 +4036,45 @@ function bindEvents() {
       resetData
     );
 
+}
+
+
+/* ============================================================
+   INIT
+============================================================ */
+
+function init() {
+
+  state =
+    loadState();
+
+
+  marketState =
+    loadMarket();
+
+
+  selectedChildId =
+    state.children[0]
+      ?.id || null;
+
+
+  bindEvents();
+
+
+  renderAll();
+
 
   /*
-    resize
+    起動時にGitHub上の
+    最新market.jsonを確認。
   */
 
-  window.addEventListener(
-    "resize",
-    drawChart
-  );
+  fetchMarketData();
 
 }
 
 
-/* ============================================================
-   INITIALIZE
-============================================================ */
-
-function initialize() {
-
-  try {
-
-    /*
-      データロード
-    */
-
-    state =
-      loadState();
-
-
-    marketState =
-      loadMarket();
-
-
-    selectedChildId =
-      state.children[0]?.id ||
-      null;
-
-
-    /*
-      イベント登録
-    */
-
-    bindEvents();
-
-
-    /*
-      初期画面
-    */
-
-    renderAll();
-
-
-    /*
-      比率表示
-    */
-
-    updateRatioFromSave();
-
-
-    /*
-      開発時確認用
-    */
-
-    console.log(
-      "Kids Money Lab V2.1 initialized."
-    );
-
-
-  } catch (error) {
-
-    console.error(
-      "Initialization error:",
-      error
-    );
-
-
-    showError(
-      "アプリの起動中にエラーが発生しました。"
-    );
-
-  }
-
-}
-
-
-/* ============================================================
-   DOM READY
-============================================================ */
-
-if (
-  document.readyState ===
-  "loading"
-) {
-
-  document.addEventListener(
-    "DOMContentLoaded",
-    initialize,
-    {
-      once: true
-    }
-  );
-
-} else {
-
-  initialize();
-
-}
+document.addEventListener(
+  "DOMContentLoaded",
+  init
+);
