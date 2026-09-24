@@ -1,97 +1,20 @@
-<!doctype html>
-<html lang="ja">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#f5f7fb">
-<title>こどもマネー・ラボ</title>
-<link rel="stylesheet" href="style.css">
-</head>
-<body>
-<header>
-  <div><small>MONEY EDUCATION</small><h1>こどもマネー・ラボ</h1><p>貯める・増やす・考えるを一緒に学ぶ</p></div>
-  <button id="settings">⚙️</button>
-</header>
-<main>
-<section class="card hero">
-  <div class="childbar"><label>子ども</label><select id="child"></select><button id="addChild">＋追加</button></div>
-  <div class="stats">
-    <div><small>現在の合計</small><strong id="total">¥0</strong><span id="gain">元本 ¥0</span></div>
-    <div><small>貯金</small><b id="cash">¥0</b></div>
-    <div><small>投資</small><b id="invest">¥0</b></div>
-  </div>
-</section>
-
-<nav>
-<button class="tab active" data-tab="home">🏠 ホーム</button>
-<button class="tab" data-tab="history">🧾 入金履歴</button>
-<button class="tab" data-tab="sim">📈 将来予想</button>
-<button class="tab" data-tab="learn">💡 学ぶ</button>
-</nav>
-
-<section id="home" class="panel active">
-<div class="head"><h2>お金の内訳</h2><button class="primary" id="addTx">＋ 入金</button></div>
-<div id="assets" class="grid"></div>
-<div class="card lesson"><small>今日の学び</small><h3>貯金と投資は役割が違う</h3><p>貯金は値下がりしにくい一方、大きく増えることも期待しにくい。投資は値段が上下する代わりに、長期で増える可能性があります。</p></div>
-<div class="card"><div class="head"><h2>元本の推移</h2><small>入金ベース</small></div><canvas id="chart" height="220"></canvas></div>
-</section>
-
-<section id="history" class="panel">
-<div class="head"><h2>入金履歴</h2><button class="primary" id="addTx2">＋ 入金</button></div>
-<div id="transactions"></div>
-</section>
-
-<section id="sim" class="panel">
-<div class="card">
-<small>FUTURE SIMULATION</small><h2>18歳のとき、いくら？</h2>
-<p class="muted">現在残高＋これからの年間入金を、教育用の想定利率で試算します。</p>
-<div class="form3">
-<label>現在年齢<input id="age" type="number" min="0" max="100"></label>
-<label>年間追加額<input id="annual" type="number" min="0" step="10000" value="120000"></label>
-<label>年数<input id="years" type="number" min="1" max="60" value="11"></label>
-</div>
-<button class="primary wide" id="simulate">シミュレーションする</button>
-</div>
-<div id="result"></div>
-<div class="card"><h3>大切な注意</h3><p>想定リターンは将来の保証ではありません。実際の投資では価格が大きく下がることがあります。</p></div>
-</section>
-
-<section id="learn" class="panel">
-<div class="learn">
-<article class="card"><b>🏦</b><h3>貯金</h3><p>お金を安全に置いておく方法。増えるスピードは一般に小さいです。</p><span class="risk low">リスク：小</span></article>
-<article class="card"><b>🌎</b><h3>全世界株式</h3><p>世界中の会社に広く投資する考え方。元本割れの可能性があります。</p><span class="risk high">リスク：大</span></article>
-<article class="card"><b>🇺🇸</b><h3>S&amp;P500</h3><p>米国の代表的な株価指数。価格は上下し、将来の利益は保証されません。</p><span class="risk high">リスク：大</span></article>
-<article class="card"><b>⏳</b><h3>複利</h3><p>増えた分も次の期間の運用対象になり、時間とともに成長が積み重なる考え方です。</p><span class="risk medium">時間が味方</span></article>
-<article class="card"><b>📉</b><h3>リスク</h3><p>「危険」だけでなく、結果がどれくらい上下する可能性があるかという意味でも使います。</p><span class="risk medium">値動き</span></article>
-<article class="card"><b>🧠</b><h3>考えて選ぶ</h3><p>いつ使うお金か、どこまで値下がりに耐えられるかを考えて選びます。</p><span class="risk medium">自分で判断</span></article>
-</div>
-</section>
-</main>
-
-<div class="modal hidden" id="txModal"><div class="modalbox">
-<div class="modalhead"><h2>入金を記録</h2><button data-close="txModal">×</button></div>
-<form id="txForm">
-<label>日付<input id="txDate" type="date" required></label>
-<label>金額<input id="amount" type="number" min="1" required></label>
-<label>理由<select id="reason"><option>お年玉</option><option>誕生日</option><option>入学祝い</option><option>お手伝い</option><option>親から</option><option>その他</option></select></label>
-<label>行き先<select id="asset"></select></label>
-<label>メモ<textarea id="memo" rows="2"></textarea></label>
-<button class="primary wide">保存</button>
-</form></div></div>
-
-<div class="modal hidden" id="childModal"><div class="modalbox">
-<div class="modalhead"><h2>子どもを追加</h2><button data-close="childModal">×</button></div>
-<form id="childForm"><label>名前<input id="childName" required></label><label>生年<input id="birth" type="number" min="2000" max="2100" required></label><button class="primary wide">追加</button></form>
-</div></div>
-
-<div class="modal hidden" id="settingsModal"><div class="modalbox">
-<div class="modalhead"><h2>データ管理</h2><button data-close="settingsModal">×</button></div>
-<p class="muted">データはこのブラウザに保存され、GitHubには送信されません。</p>
-<button class="secondary wide" id="export">⬇️ JSONを書き出す</button>
-<label class="file wide">⬆️ JSONを読み込む<input id="import" type="file" accept=".json"></label>
-<button class="danger wide" id="reset">データを初期化</button>
-</div></div>
-
-<footer>こどもマネー・ラボ V1｜教育用シミュレーションです。投資成果を保証するものではありません。</footer>
-<script src="app.js"></script>
-</body></html>
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>こどもマネー・ラボ V2</title><link rel="stylesheet" href="style.css"></head><body>
+<header><div><small>MONEY EDUCATION · V2</small><h1>こどもマネー・ラボ</h1><p>ためる・つかう・ふやす・かんがえる</p></div><button id="settings">⚙️</button></header><main>
+<section class="card hero"><div class="mode"><div><label>たいしょう</label><select id="child"></select><button id="addChild">＋ついか</button></div><label class="switch"><input id="kidMode" type="checkbox"><span></span>こどもモード</label></div>
+<div class="stats"><div><small id="totalL">ぜんぶ</small><strong id="total">¥0</strong><span id="note"></span></div><div><small id="cashL">ためている</small><b id="cash">¥0</b></div><div><small id="investL">ふやしている</small><b id="invest">¥0</b></div></div>
+<div class="summary"><span>いれた <b id="ins">¥0</b></span><span>つかった <b id="outs">¥0</b></span><span>ふえた？ <b id="pnl">¥0</b></span></div></section>
+<nav><button class="tab active" data-tab="home">🏠 ホーム</button><button class="tab" data-tab="money">💰 おかね</button><button class="tab" data-tab="future">📈 しょうらい</button><button class="tab" data-tab="goals">🎯 めあて</button><button class="tab" data-tab="learn">💡 まなぶ</button></nav>
+<section id="home" class="panel active"><div class="head"><h2 id="assetTitle">おかねの ばしょ</h2><div><button class="secondary" id="out">− つかう</button><button class="primary" id="in">＋ いれる</button></div></div><div id="assets" class="grid"></div>
+<div class="card"><div class="head"><h2>インデックスの うごき</h2><button class="secondary" id="refresh">↻ 更新</button></div><div id="marketStatus" class="muted">まだ みていません</div><div id="market" class="marketgrid"></div><p class="notice">指数を使った教育用の参考表示です。</p></div>
+<div class="card lesson"><small>きょうの おべんきょう</small><h3>おかねには「いれる・つかう・のこす」があるよ</h3><p>おかねの うごきを きろくすると、どこへいったか わかるよ。</p></div>
+<div class="card"><div class="head"><h2>おかねの うごき</h2></div><canvas id="chart" height="220"></canvas></div></section>
+<section id="money" class="panel"><div class="head"><h2>おかねの きろく</h2><div><button class="secondary" id="out2">− つかう</button><button class="primary" id="in2">＋ いれる</button></div></div><div class="filters"><select id="tf"><option value="all">すべて</option><option value="in">いれた</option><option value="out">つかった</option></select><select id="af"><option value="all">すべて</option></select></div><div id="txs"></div></section>
+<section id="future" class="panel"><div class="card"><small>FUTURE SIMULATION</small><h2>しょうらい、いくら？</h2><p class="muted">いまのおかねと、これから入れるおかねを使って考えてみよう。</p><div class="form3"><label>いまの年齢<input id="age" type="number" value="7"></label><label>1ねんに いれる<input id="annual" type="number" value="120000" step="10000"></label><label>何年後？<input id="years" type="number" value="10"></label></div><div class="form2"><label>ためる <b id="sr">50%</b><input id="saveRatio" type="range" min="0" max="100" value="50"></label><label>ふやす <b id="ir">50%</b><input id="investRatio" type="range" min="0" max="100" value="50"></label></div><button class="primary wide" id="simulate">しょうらいを みる</button></div><div id="result"></div>
+<div class="card"><h3>📉 もし おかねが 30%へったら？</h3><p class="muted">投資している部分だけ下がる体験をしてみよう。</p><input id="crash" type="range" min="0" max="60" value="30" step="5"><b id="crashL">-30%</b><div class="crashbox" id="crashBox"></div></div></section>
+<section id="goals" class="panel"><div class="head"><h2>🎯 めあて</h2><button class="primary" id="addGoal">＋ めあて</button></div><div id="goals"></div><div class="card"><h3>めあてを つくろう</h3><p>「いつ」「なにに」「いくら」を決めると、ためる理由がわかりやすくなるよ。</p></div></section>
+<section id="learn" class="panel"><div class="learn"><article class="card"><b>🏦</b><h3>ためる</h3><p>すぐには つかわない おかねを のこしておくことだよ。</p><span>へりにくい</span></article><article class="card"><b>🌎</b><h3>せかいの かぶ</h3><p>せかいの いろいろな かいしゃに ひろく おかねを いれる かんがえかただよ。</p><span>へることもある</span></article><article class="card"><b>🇺🇸</b><h3>アメリカの かぶ</h3><p>アメリカの おおきな かいしゃを まとめて みる ものさしだよ。</p><span>へることもある</span></article><article class="card"><b>📊</b><h3>インデックス</h3><p>たくさんの かいしゃの うごきを まとめて みる「ものさし」だよ。</p><span>ものさし</span></article><article class="card"><b>⏳</b><h3>ふくり</h3><p>ふえた おかねも いっしょに つぎの おかねを ふやしていく かんがえかただよ。</p><span>じかんが みかた</span></article><article class="card"><b>📉</b><h3>リスク</h3><p>おかねが へることも あるよ。ふえるかのうせいと へるかのうせいを いっしょに かんがえよう。</p><span>へることもある</span></article></div></section></main>
+<div class="modal hidden" id="txModal"><div class="modalbox"><div class="head"><h2 id="txTitle">おかねを いれる</h2><button data-close="txModal">×</button></div><form id="txForm"><input id="txType" type="hidden"><label>ひづけ<input id="date" type="date" required></label><label>いくら？<input id="amount" type="number" min="1" required></label><label>りゆう / つかいみち<select id="reason"><option>おとしだま</option><option>おたんじょうび</option><option>おてつだい</option><option>おとうさん・おかあさん</option><option>おもちゃ</option><option>ほん・べんきょう</option><option>ゲーム</option><option>おでかけ</option><option>その他</option></select></label><label>どこ？<select id="asset"></select></label><label>メモ<textarea id="memo"></textarea></label><button class="primary wide">きろくする</button></form></div></div>
+<div class="modal hidden" id="childModal"><div class="modalbox"><div class="head"><h2>こどもを ついか</h2><button data-close="childModal">×</button></div><form id="childForm"><label>なまえ<input id="childName" required></label><label>うまれた年<input id="birth" type="number" required></label><button class="primary wide">ついか</button></form></div></div>
+<div class="modal hidden" id="goalModal"><div class="modalbox"><div class="head"><h2>めあてを つくる</h2><button data-close="goalModal">×</button></div><form id="goalForm"><label>なまえ<input id="goalName" required></label><label>いくら？<input id="goalAmount" type="number" min="1" required></label><label>いつまで？<input id="goalDate" type="date" required></label><label>いま いくら？<input id="goalSaved" type="number" value="0"></label><button class="primary wide">つくる</button></form></div></div>
+<div class="modal hidden" id="settingsModal"><div class="modalbox"><div class="head"><h2>⚙️ せってい</h2><button data-close="settingsModal">×</button></div><p class="muted">V2はV1からデータ移行しません。</p><button class="secondary wide" id="export">⬇️ データを ほぞん</button><label class="file wide">⬆️ データを よみこむ<input id="import" type="file" accept=".json"></label><button class="danger wide" id="reset">データを ぜんぶ けす</button></div></div>
+<footer>こどもマネー・ラボ V2｜金融教育用です。投資成果を保証しません。</footer><script src="app.js"></script></body></html>
