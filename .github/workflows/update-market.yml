@@ -17,134 +17,25 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Fetch market data
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Update market data
         run: |
-          python - <<'PY'
-          import json
-          import urllib.parse
-          import urllib.request
-          from datetime import datetime, timezone
+          python scripts/update_market.py
 
-          OUTPUT_FILE = "data/market.json"
+      - name: Commit market data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          MARKETS = {
-              "world": {
-                  "name": "全世界株式",
-                  "symbol": "ACWI",
-                  "proxy": True
-              },
-              "sp": {
-                  "name": "S&P500",
-                  "symbol": "^GSPC",
-                  "proxy": False
-              }
-          }
+          git add data/market.json
 
-          def fetch_chart(symbol):
-              encoded = urllib.parse.quote(symbol, safe="")
-
-              url = (
-                  "https://query1.finance.yahoo.com/"
-                  "v8/finance/chart/"
-                  + encoded
-                  + "?range=10y&interval=1d"
-              )
-
-              request = urllib.request.Request(
-                  url,
-                  headers={
-                      "User-Agent": "Mozilla/5.0"
-                  }
-              )
-
-              with urllib.request.urlopen(
-                  request,
-                  timeout=30
-              ) as response:
-                  return json.load(response)
-
-          def parse_series(data):
-              result = data["chart"]["result"][0]
-
-              timestamps = result.get(
-                  "timestamp",
-                  []
-              )
-
-              quotes = (
-                  result["indicators"]["quote"][0]
-              )
-
-              closes = quotes.get(
-                  "close",
-                  []
-              )
-
-              series = []
-
-              for timestamp, close in zip(
-                  timestamps,
-                  closes
-              ):
-                  if close is None:
-                      continue
-
-                  dt = datetime.fromtimestamp(
-                      timestamp,
-                      timezone.utc
-                  )
-
-                  series.append({
-                      "date": dt.date().isoformat(),
-                      "value": float(close)
-                  })
-
-              series.sort(
-                  key=lambda x: x["date"]
-              )
-
-              return series
-
-          output = {
-              "version": 2,
-              "updated": datetime.now(
-                  timezone.utc
-              ).isoformat(),
-              "markets": {}
-          }
-
-          for key, config in MARKETS.items():
-              print(
-                  f"Fetching {key}: "
-                  f"{config['symbol']}"
-              )
-
-              data = fetch_chart(
-                  config["symbol"]
-              )
-
-              series = parse_series(data)
-
-              if not series:
-                  raise RuntimeError(
-                      f"No market data: {key}"
-                  )
-
-              latest = series[-1]
-
-              previous = (
-                  series[-2]
-                  if len(series) >= 2
-                  else None
-              )
-
-              change = 0.0
-
-              if previous:
-                  previous_value = float(
-                      previous["value"]
-                  )
-
-                  latest_value = float(
-                      latest["value"]
-                 
+          if git diff --cached --quiet; then
+            echo "No market data changes."
+          else
+            git commit -m "Update market data"
+            git push
+          fi
