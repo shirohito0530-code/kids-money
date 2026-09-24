@@ -1,0 +1,22 @@
+{
+  "version": 2,
+  "updated": null,
+  "markets": {
+    "world": {
+      "name": "全世界株式",
+      "symbol": "ACWI",
+      "proxy": true,
+      "latest": null,
+      "change": 0,
+      "series": []
+    },
+    "sp": {
+      "name": "S&P500",
+      "symbol": "^GSPC",
+      "proxy": false,
+      "latest": null,
+      "change": 0,
+      "series": []
+    }
+  }
+}
