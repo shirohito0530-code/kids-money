@@ -3879,6 +3879,8 @@ function bindEvents() {
 
         renderAll();
 
+        refreshLearnForModeChange();
+
       }
     );
 
