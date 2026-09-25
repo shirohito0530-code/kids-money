@@ -9,7 +9,7 @@
   <meta name="theme-color" content="#315efb">
   <meta name="apple-mobile-web-app-capable" content="yes">
 
-  <title>こどもマネー・ラボ V2.1</title>
+  <title>こどもマネー・ラボ V2.7</title>
 
   <link rel="stylesheet" href="./style.css">
 </head>
@@ -18,7 +18,7 @@
 
 <header class="site-header">
   <div>
-    <small>MONEY EDUCATION · V2.1</small>
+    <small>MONEY EDUCATION · V2.7</small>
     <h1>こどもマネー・ラボ</h1>
     <p>ためる・つかう・ふやす・かんがえる</p>
   </div>
@@ -156,6 +156,14 @@
       type="button"
     >
       💡 まなぶ
+    </button>
+
+    <button
+      class="tab"
+      data-tab="education"
+      type="button"
+    >
+      🧪 おかねラボ
     </button>
 
   </nav>
@@ -502,7 +510,7 @@
 
     </div>
 
-    <div id="goals"></div>
+    <div id="goalsList"></div>
 
     <div class="card">
 
@@ -550,6 +558,42 @@
       <div class="card">
         <p>
           まなぶ データを よみこんでいます…
+        </p>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- =========================
+       EDUCATION (おかねラボ V2.7)
+  ========================== -->
+
+  <section
+    id="education"
+    class="panel"
+  >
+    <div class="section-header">
+      <div>
+        <small>
+          MONEY LAB
+        </small>
+        <h2>
+          🧪 おかねラボ
+        </h2>
+        <p class="muted">
+          おかねの しくみを
+          たのしく まなぼう。
+        </p>
+      </div>
+    </div>
+    <div
+      id="educationContent"
+      class="education-content"
+    >
+      <div class="card">
+        <p>
+          おかねラボを
+          よみこんでいます…
         </p>
       </div>
     </div>
@@ -840,7 +884,7 @@
 
 
     <p class="muted">
-      V2.1はV1からデータ移行しません。
+      V2.7 金融教育連携モード
     </p>
 
 
@@ -890,7 +934,7 @@
 
 
 <footer>
-  こどもマネー・ラボ V2.1｜
+  こどもマネー・ラボ V2.7｜
   金融教育用です。投資成果を保証しません。
 </footer>
 
