@@ -933,3 +933,222 @@ canvas {
     width: 100%;
   }
 }
+/* ============================================================
+   V2.7 EDUCATION CENTER
+============================================================ */
+
+.education-content {
+  display: block;
+}
+
+.education-menu {
+  display: grid;
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.education-menu-card {
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  border-radius: 18px;
+  padding: 20px;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform .15s ease,
+    box-shadow .15s ease;
+}
+
+.education-menu-card:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 8px 24px rgba(0,0,0,.08);
+}
+
+.education-menu-card:active {
+  transform: scale(.98);
+}
+
+.education-menu-card span {
+  display: block;
+  font-size: 34px;
+  margin-bottom: 10px;
+}
+
+.education-menu-card strong {
+  display: block;
+  font-size: 18px;
+  margin-bottom: 6px;
+}
+
+.education-menu-card small {
+  color: #667085;
+  line-height: 1.6;
+}
+
+.education-summary,
+.education-stat-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.education-stat-grid {
+  grid-template-columns:
+    repeat(4, 1fr);
+}
+
+.education-summary > div,
+.education-stat-grid > div {
+  background: #f8fafc;
+  border-radius: 14px;
+  padding: 16px;
+  text-align: center;
+}
+
+.education-summary strong,
+.education-stat-grid strong {
+  display: block;
+  font-size: 24px;
+  margin-bottom: 4px;
+}
+
+.education-summary span,
+.education-stat-grid span {
+  font-size: 12px;
+  color: #667085;
+}
+
+.education-back {
+  margin-bottom: 14px;
+}
+
+.market-learning-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(2, 1fr);
+  gap: 14px;
+}
+
+.market-learning-card strong {
+  display: block;
+  font-size: 24px;
+  margin: 10px 0;
+}
+
+.education-big-icon {
+  font-size: 56px;
+  margin-bottom: 10px;
+}
+
+.education-detail {
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.simulation-tabs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  margin-bottom: 14px;
+}
+
+.simulation-tabs button {
+  flex: 0 0 auto;
+  border: 1px solid #d0d5dd;
+  background: #fff;
+  border-radius: 999px;
+  padding: 10px 16px;
+}
+
+.simulation-tabs button.active {
+  background: #315efb;
+  color: white;
+  border-color: #315efb;
+}
+
+.simulation-result {
+  margin-top: 14px;
+}
+
+.simulation-number {
+  font-size: 34px;
+  font-weight: 700;
+  margin: 14px 0;
+}
+
+.quiz-card {
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.quiz-number {
+  display: inline-block;
+  background: #f2f4f7;
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.quiz-options {
+  display: grid;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.quiz-option {
+  width: 100%;
+  text-align: left;
+  border: 1px solid #d0d5dd;
+  background: white;
+  border-radius: 14px;
+  padding: 16px;
+  cursor: pointer;
+}
+
+.quiz-option:hover {
+  background: #f8fafc;
+}
+
+.quiz-option:disabled {
+  opacity: .6;
+  cursor: default;
+}
+
+.quiz-result {
+  margin-top: 20px;
+  padding: 20px;
+  background: #f8fafc;
+  border-radius: 14px;
+  text-align: center;
+}
+
+.quiz-result-icon {
+  font-size: 46px;
+}
+
+@media (max-width: 700px) {
+
+  .education-menu {
+    grid-template-columns: 1fr;
+  }
+
+  .education-summary,
+  .education-stat-grid {
+    grid-template-columns:
+      repeat(2, 1fr);
+  }
+
+  .market-learning-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .simulation-number {
+    font-size: 28px;
+  }
+
+}
