@@ -2,25 +2,44 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
+
   <meta
     name="viewport"
     content="width=device-width, initial-scale=1, viewport-fit=cover"
   >
-  <meta name="theme-color" content="#315efb">
-  <meta name="apple-mobile-web-app-capable" content="yes">
+
+  <meta
+    name="theme-color"
+    content="#315efb"
+  >
+
+  <meta
+    name="apple-mobile-web-app-capable"
+    content="yes"
+  >
 
   <title>こどもマネー・ラボ V2.7</title>
 
-  <link rel="stylesheet" href="./style.css">
+  <link
+    rel="stylesheet"
+    href="./style.css"
+  >
 </head>
 
 <body>
 
 <header class="site-header">
+
   <div>
     <small>MONEY EDUCATION · V2.7</small>
-    <h1>こどもマネー・ラボ</h1>
-    <p>ためる・つかう・ふやす・かんがえる</p>
+
+    <h1>
+      こどもマネー・ラボ
+    </h1>
+
+    <p>
+      ためる・つかう・ふやす・かんがえる
+    </p>
   </div>
 
   <button
@@ -31,22 +50,28 @@
   >
     ⚙️
   </button>
+
 </header>
+
 
 <main>
 
-  <!-- =========================
+  <!-- =====================================================
        SUMMARY
-  ========================== -->
+  ====================================================== -->
 
   <section class="card hero">
 
     <div class="mode-row">
 
       <div class="child-selector">
-        <label for="child">たいしょう</label>
+
+        <label for="child">
+          たいしょう
+        </label>
 
         <div class="inline">
+
           <select id="child"></select>
 
           <button
@@ -56,55 +81,90 @@
           >
             ＋ついか
           </button>
+
         </div>
+
       </div>
 
+
       <label class="switch">
+
         <input
           id="kidMode"
           type="checkbox"
         >
+
         <span class="switch-slider"></span>
-        <span>こどもモード</span>
+
+        <span>
+          こどもモード
+        </span>
+
       </label>
 
     </div>
 
+
     <div class="stats">
 
       <div>
-        <small id="totalL">ぜんぶ</small>
-        <strong id="total">¥0</strong>
+        <small id="totalL">
+          ぜんぶ
+        </small>
+
+        <strong id="total">
+          ¥0
+        </strong>
+
         <span id="note"></span>
       </div>
 
-      <div>
-        <small id="cashL">ためている</small>
-        <b id="cash">¥0</b>
-      </div>
 
       <div>
-        <small id="investL">ふやしている</small>
-        <b id="invest">¥0</b>
+        <small id="cashL">
+          ためている
+        </small>
+
+        <b id="cash">
+          ¥0
+        </b>
+      </div>
+
+
+      <div>
+        <small id="investL">
+          ふやしている
+        </small>
+
+        <b id="invest">
+          ¥0
+        </b>
       </div>
 
     </div>
+
 
     <div class="summary">
 
       <span>
         いれた
-        <b id="ins">¥0</b>
+        <b id="ins">
+          ¥0
+        </b>
       </span>
 
       <span>
         つかった
-        <b id="outs">¥0</b>
+        <b id="outs">
+          ¥0
+        </b>
       </span>
 
       <span>
         ふえた？
-        <b id="pnl">¥0</b>
+        <b id="pnl">
+          ¥0
+        </b>
       </span>
 
     </div>
@@ -112,11 +172,14 @@
   </section>
 
 
-  <!-- =========================
+  <!-- =====================================================
        NAV
-  ========================== -->
+  ====================================================== -->
 
-  <nav class="tabs" aria-label="メニュー">
+  <nav
+    class="tabs"
+    aria-label="メニュー"
+  >
 
     <button
       class="tab active"
@@ -169,9 +232,9 @@
   </nav>
 
 
-  <!-- =========================
+  <!-- =====================================================
        HOME
-  ========================== -->
+  ====================================================== -->
 
   <section
     id="home"
@@ -233,6 +296,7 @@
 
       </div>
 
+
       <div
         id="marketStatus"
         class="muted"
@@ -240,10 +304,12 @@
         まだ みていません
       </div>
 
+
       <div
         id="market"
         class="market-grid"
       ></div>
+
 
       <p class="notice">
         インデックスの値を使った教育用の参考表示です。
@@ -285,7 +351,11 @@
     <div class="card">
 
       <div class="section-header">
-        <h2>おかねの うごき</h2>
+
+        <h2>
+          おかねの うごき
+        </h2>
+
         <button
           class="secondary tab-link"
           data-tab="money"
@@ -293,7 +363,9 @@
         >
           💰 きろくを みる →
         </button>
+
       </div>
+
 
       <canvas
         id="chart"
@@ -305,9 +377,9 @@
   </section>
 
 
-  <!-- =========================
+  <!-- =====================================================
        MONEY
-  ========================== -->
+  ====================================================== -->
 
   <section
     id="money"
@@ -316,7 +388,9 @@
 
     <div class="section-header">
 
-      <h2>おかねの きろく</h2>
+      <h2>
+        おかねの きろく
+      </h2>
 
       <div class="button-group">
 
@@ -344,13 +418,24 @@
     <div class="filters">
 
       <select id="tf">
-        <option value="all">すべて</option>
-        <option value="in">いれた</option>
-        <option value="out">つかった</option>
+        <option value="all">
+          すべて
+        </option>
+
+        <option value="in">
+          いれた
+        </option>
+
+        <option value="out">
+          つかった
+        </option>
       </select>
 
+
       <select id="af">
-        <option value="all">すべて</option>
+        <option value="all">
+          すべて
+        </option>
       </select>
 
     </div>
@@ -361,9 +446,9 @@
   </section>
 
 
-  <!-- =========================
+  <!-- =====================================================
        FUTURE
-  ========================== -->
+  ====================================================== -->
 
   <section
     id="future"
@@ -390,6 +475,7 @@
 
         <label>
           いまの年齢
+
           <input
             id="age"
             type="number"
@@ -397,10 +483,13 @@
             max="100"
             value="7"
           >
+
         </label>
+
 
         <label>
           1ねんに いれる
+
           <input
             id="annual"
             type="number"
@@ -408,10 +497,13 @@
             step="10000"
             value="120000"
           >
+
         </label>
+
 
         <label>
           何年後？
+
           <input
             id="years"
             type="number"
@@ -419,6 +511,7 @@
             max="80"
             value="10"
           >
+
         </label>
 
       </div>
@@ -427,8 +520,12 @@
       <div class="form-grid-2">
 
         <label>
+
           ためる
-          <b id="sr">50%</b>
+
+          <b id="sr">
+            50%
+          </b>
 
           <input
             id="saveRatio"
@@ -437,11 +534,17 @@
             max="100"
             value="50"
           >
+
         </label>
 
+
         <label>
+
           ふやす
-          <b id="ir">50%</b>
+
+          <b id="ir">
+            50%
+          </b>
 
           <input
             id="investRatio"
@@ -450,6 +553,7 @@
             max="100"
             value="50"
           >
+
         </label>
 
       </div>
@@ -502,9 +606,9 @@
   </section>
 
 
-  <!-- =========================
+  <!-- =====================================================
        GOALS
-  ========================== -->
+  ====================================================== -->
 
   <section
     id="goals"
@@ -513,19 +617,47 @@
 
     <div class="section-header">
 
-      <h2>🎯 めあて</h2>
+      <div>
+        <small>
+          GOAL
+        </small>
 
-      <button
-        id="addGoal"
-        class="primary"
-        type="button"
-      >
-        ＋ めあて
-      </button>
+        <h2>
+          🎯 めあて
+        </h2>
+      </div>
+
+
+      <div class="button-group">
+
+        <!-- ★追加：今日のお金へ戻る -->
+        <button
+          id="goalsBack"
+          class="secondary"
+          type="button"
+        >
+          ← 今日のお金
+        </button>
+
+
+        <button
+          id="addGoal"
+          class="primary"
+          type="button"
+        >
+          ＋ めあて
+        </button>
+
+      </div>
 
     </div>
 
+
+    <!-- ★重要
+         目標だけを描画する専用領域
+         renderGoals() はここだけを書き換える -->
     <div id="goalsList"></div>
+
 
     <div class="card">
 
@@ -543,28 +675,38 @@
   </section>
 
 
-  <!-- =========================
+  <!-- =====================================================
        LEARN
-  ========================== -->
+  ====================================================== -->
 
   <section
     id="learn"
     class="panel"
   >
+
     <div class="section-header">
+
       <div>
-        <small>LEARNING</small>
+
+        <small>
+          LEARNING
+        </small>
+
         <h2>
           📚
+
           <span id="learnTitle">
             おかねを まなぶ
           </span>
         </h2>
+
         <p class="muted">
           おかねの「なぜ？」を
           たのしく しろう。
         </p>
+
       </div>
+
 
       <button
         id="learnBack"
@@ -573,41 +715,56 @@
       >
         ← もどる
       </button>
+
     </div>
+
+
     <div
       id="learnContent"
       class="learn-content"
     >
+
       <div class="card">
+
         <p>
           まなぶ データを よみこんでいます…
         </p>
+
       </div>
+
     </div>
+
   </section>
 
 
-  <!-- =========================
-       EDUCATION (おかねラボ V2.7)
-  ========================== -->
+  <!-- =====================================================
+       EDUCATION / おかねラボ
+  ====================================================== -->
 
   <section
     id="education"
     class="panel"
   >
+
     <div class="section-header">
+
       <div>
+
         <small>
           MONEY LAB
         </small>
+
         <h2>
           🧪 おかねラボ
         </h2>
+
         <p class="muted">
           おかねの しくみを
           たのしく まなぼう。
         </p>
+
       </div>
+
 
       <button
         id="educationBack"
@@ -616,26 +773,34 @@
       >
         ← もどる
       </button>
+
     </div>
+
+
     <div
       id="educationContent"
       class="education-content"
     >
+
       <div class="card">
+
         <p>
           おかねラボを
           よみこんでいます…
         </p>
+
       </div>
+
     </div>
+
   </section>
 
 </main>
 
 
-<!-- =========================
+<!-- =====================================================
      TRANSACTION MODAL
-========================== -->
+====================================================== -->
 
 <div
   class="modal hidden"
@@ -668,8 +833,10 @@
         type="hidden"
       >
 
+
       <label>
         ひづけ
+
         <input
           id="date"
           type="date"
@@ -677,8 +844,10 @@
         >
       </label>
 
+
       <label>
         いくら？
+
         <input
           id="amount"
           type="number"
@@ -688,22 +857,52 @@
         >
       </label>
 
+
       <label>
         りゆう / つかいみち
 
         <select id="reason">
-          <option>おとしだま</option>
-          <option>おたんじょうび</option>
-          <option>おてつだい</option>
-          <option>おとうさん・おかあさん</option>
-          <option>おもちゃ</option>
-          <option>ほん・べんきょう</option>
-          <option>ゲーム</option>
-          <option>おでかけ</option>
-          <option>その他</option>
+
+          <option>
+            おとしだま
+          </option>
+
+          <option>
+            おたんじょうび
+          </option>
+
+          <option>
+            おてつだい
+          </option>
+
+          <option>
+            おとうさん・おかあさん
+          </option>
+
+          <option>
+            おもちゃ
+          </option>
+
+          <option>
+            ほん・べんきょう
+          </option>
+
+          <option>
+            ゲーム
+          </option>
+
+          <option>
+            おでかけ
+          </option>
+
+          <option>
+            その他
+          </option>
+
         </select>
 
       </label>
+
 
       <label>
         どこ？
@@ -711,6 +910,7 @@
         <select id="asset"></select>
 
       </label>
+
 
       <label>
         メモ
@@ -721,6 +921,7 @@
         ></textarea>
 
       </label>
+
 
       <button
         class="primary wide"
@@ -736,9 +937,9 @@
 </div>
 
 
-<!-- =========================
+<!-- =====================================================
      CHILD MODAL
-========================== -->
+====================================================== -->
 
 <div
   class="modal hidden"
@@ -768,11 +969,13 @@
 
       <label>
         なまえ
+
         <input
           id="childName"
           required
         >
       </label>
+
 
       <label>
         うまれた年
@@ -786,6 +989,7 @@
         >
 
       </label>
+
 
       <button
         class="primary wide"
@@ -801,9 +1005,9 @@
 </div>
 
 
-<!-- =========================
+<!-- =====================================================
      GOAL MODAL
-========================== -->
+====================================================== -->
 
 <div
   class="modal hidden"
@@ -840,6 +1044,7 @@
         >
       </label>
 
+
       <label>
         いくら？
 
@@ -851,6 +1056,7 @@
         >
       </label>
 
+
       <label>
         いつまで？
 
@@ -860,6 +1066,7 @@
           required
         >
       </label>
+
 
       <label>
         いま いくら？
@@ -871,6 +1078,7 @@
           value="0"
         >
       </label>
+
 
       <button
         class="primary wide"
@@ -886,9 +1094,9 @@
 </div>
 
 
-<!-- =========================
+<!-- =====================================================
      SETTINGS
-========================== -->
+====================================================== -->
 
 <div
   class="modal hidden"
@@ -954,9 +1162,9 @@
 </div>
 
 
-<!-- =========================
+<!-- =====================================================
      ERROR
-========================== -->
+====================================================== -->
 
 <div
   id="errorBox"
@@ -965,8 +1173,10 @@
 
 
 <footer>
+
   こどもマネー・ラボ V2.7｜
   金融教育用です。投資成果を保証しません。
+
 </footer>
 
 
