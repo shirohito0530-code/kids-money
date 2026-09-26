@@ -3982,3 +3982,1734 @@ document.addEventListener(
   "DOMContentLoaded",
   init
 );
+
+/* ============================================================
+   V2.7.1
+   子ども編集・削除
+   入金/出金履歴 編集・削除
+============================================================ */
+
+
+/* ============================================================
+   編集中ID
+============================================================ */
+
+let editingChildId = null;
+
+let editingTransactionId = null;
+
+
+/* ============================================================
+   CHILD SELECTOR
+   ------------------------------------------------------------
+   既存の子ども選択欄に
+   「編集」「削除」を追加
+============================================================ */
+
+function renderChildSelector() {
+
+  const select =
+    $("child");
+
+
+  if (!select) {
+    return;
+  }
+
+
+  select.innerHTML = "";
+
+
+  for (
+    const child of state.children
+  ) {
+
+    const option =
+      document.createElement(
+        "option"
+      );
+
+
+    option.value =
+      child.id;
+
+
+    option.textContent =
+      child.name;
+
+
+    select.appendChild(
+      option
+    );
+
+  }
+
+
+  if (
+    !state.children.some(
+      child =>
+        child.id ===
+        selectedChildId
+    )
+  ) {
+
+    selectedChildId =
+      state.children[0]?.id ||
+      null;
+
+  }
+
+
+  select.value =
+    selectedChildId ||
+    "";
+
+
+  /*
+   * 編集・削除ボタンを生成
+   */
+
+  const parent =
+    select.parentElement;
+
+
+  if (!parent) {
+    return;
+  }
+
+
+  let editButton =
+    document.getElementById(
+      "editChild"
+    );
+
+
+  let deleteButton =
+    document.getElementById(
+      "deleteChild"
+    );
+
+
+  if (!editButton) {
+
+    editButton =
+      document.createElement(
+        "button"
+      );
+
+
+    editButton.id =
+      "editChild";
+
+
+    editButton.type =
+      "button";
+
+
+    editButton.className =
+      "secondary";
+
+
+    editButton.textContent =
+      "✏️ 編集";
+
+
+    parent.appendChild(
+      editButton
+    );
+
+  }
+
+
+  if (!deleteButton) {
+
+    deleteButton =
+      document.createElement(
+        "button"
+      );
+
+
+    deleteButton.id =
+      "deleteChild";
+
+
+    deleteButton.type =
+      "button";
+
+
+    deleteButton.className =
+      "secondary";
+
+
+    deleteButton.textContent =
+      "🗑️ 削除";
+
+
+    parent.appendChild(
+      deleteButton
+    );
+
+  }
+
+}
+
+
+/* ============================================================
+   子ども追加・編集モーダル
+============================================================ */
+
+function openChildModal(
+  childId = null
+) {
+
+  editingChildId =
+    childId;
+
+
+  const title =
+    $("childModal")
+      ?.querySelector(
+        "h2"
+      );
+
+
+  const submit =
+    $("childForm")
+      ?.querySelector(
+        'button[type="submit"]'
+      );
+
+
+  if (
+    childId
+  ) {
+
+    const child =
+      state.children.find(
+        item =>
+          item.id ===
+          childId
+      );
+
+
+    if (!child) {
+      return;
+    }
+
+
+    if ($("childName")) {
+
+      $("childName").value =
+        child.name ||
+        "";
+
+    }
+
+
+    if ($("birth")) {
+
+      $("birth").value =
+        child.birthYear ||
+        "";
+
+    }
+
+
+    if (title) {
+
+      title.textContent =
+        "こどもを へんこう";
+
+    }
+
+
+    if (submit) {
+
+      submit.textContent =
+        "変更を ほぞん";
+
+    }
+
+  } else {
+
+    if ($("childName")) {
+
+      $("childName").value =
+        "";
+
+    }
+
+
+    if ($("birth")) {
+
+      $("birth").value =
+        "";
+
+    }
+
+
+    if (title) {
+
+      title.textContent =
+        "こどもを ついか";
+
+    }
+
+
+    if (submit) {
+
+      submit.textContent =
+        "ついか";
+
+    }
+
+  }
+
+
+  $("childModal")
+    ?.classList
+    .remove(
+      "hidden"
+    );
+
+}
+
+
+/* ============================================================
+   子ども保存
+============================================================ */
+
+function handleChildSubmit(
+  event
+) {
+
+  event.preventDefault();
+
+
+  const name =
+    $("childName")
+      ?.value
+      .trim();
+
+
+  const birthYear =
+    Number(
+      $("birth")
+        ?.value
+    );
+
+
+  if (!name) {
+
+    alert(
+      "なまえを いれてください。"
+    );
+
+    return;
+
+  }
+
+
+  if (
+    !Number.isFinite(
+      birthYear
+    )
+  ) {
+
+    alert(
+      "うまれた年を いれてください。"
+    );
+
+    return;
+
+  }
+
+
+  /*
+   * 編集
+   */
+
+  if (
+    editingChildId
+  ) {
+
+    const child =
+      state.children.find(
+        item =>
+          item.id ===
+          editingChildId
+      );
+
+
+    if (!child) {
+      return;
+    }
+
+
+    child.name =
+      name;
+
+
+    child.birthYear =
+      birthYear;
+
+
+  } else {
+
+    /*
+     * 新規追加
+     */
+
+    const child = {
+
+      id:
+        createId(),
+
+      name,
+
+      birthYear,
+
+      transactions: [],
+
+      goals: []
+
+    };
+
+
+    state.children.push(
+      child
+    );
+
+
+    selectedChildId =
+      child.id;
+
+  }
+
+
+  saveState();
+
+
+  closeModal(
+    "childModal"
+  );
+
+
+  editingChildId =
+    null;
+
+
+  event.target.reset();
+
+
+  renderAll();
+
+}
+
+
+/* ============================================================
+   子ども削除
+============================================================ */
+
+function deleteCurrentChild() {
+
+  const child =
+    getCurrentChild();
+
+
+  if (!child) {
+    return;
+  }
+
+
+  /*
+   * 最後の1人は削除しない。
+   *
+   * アプリが子ども0人になると
+   * 既存ロジックが動作しにくくなるため。
+   */
+
+  if (
+    state.children.length <=
+    1
+  ) {
+
+    alert(
+      "こどもが ひとりだけのときは けせません。"
+    );
+
+    return;
+
+  }
+
+
+  const transactionCount =
+    Array.isArray(
+      child.transactions
+    )
+      ? child.transactions.length
+      : 0;
+
+
+  const goalCount =
+    Array.isArray(
+      child.goals
+    )
+      ? child.goals.length
+      : 0;
+
+
+  const message =
+
+    transactionCount ||
+    goalCount
+
+      ? (
+
+          `${child.name} のデータを すべて けします。\n\n` +
+
+          `おかねの記録：${transactionCount}件\n` +
+
+          `めあて：${goalCount}件\n\n` +
+
+          "この操作はもとにもどせません。"
+
+        )
+
+      : (
+
+          `${child.name} を けします。\n\n` +
+
+          "この操作はもとにもどせません。"
+
+        );
+
+
+  if (
+    !confirm(
+      message
+    )
+  ) {
+
+    return;
+
+  }
+
+
+  const index =
+    state.children.findIndex(
+      item =>
+        item.id ===
+        child.id
+    );
+
+
+  if (
+    index < 0
+  ) {
+    return;
+  }
+
+
+  state.children.splice(
+    index,
+    1
+  );
+
+
+  selectedChildId =
+    state.children[
+      Math.max(
+        0,
+        index - 1
+      )
+    ]?.id ||
+    state.children[0]?.id ||
+    null;
+
+
+  saveState();
+
+
+  renderAll();
+
+}
+
+
+/* ============================================================
+   TRANSACTION MODAL
+============================================================ */
+
+function openTransactionModal(
+  type,
+  transactionId = null
+) {
+
+  const child =
+    getCurrentChild();
+
+
+  if (!child) {
+    return;
+  }
+
+
+  editingTransactionId =
+    null;
+
+
+  /*
+   * 編集モード
+   */
+
+  if (
+    transactionId
+  ) {
+
+    const tx =
+      child.transactions?.find(
+        item =>
+          item.id ===
+          transactionId
+      );
+
+
+    if (!tx) {
+      return;
+    }
+
+
+    editingTransactionId =
+      transactionId;
+
+
+    if ($("txType")) {
+
+      $("txType").value =
+        tx.type;
+
+    }
+
+
+    if ($("txTitle")) {
+
+      $("txTitle").textContent =
+        tx.type === "in"
+          ? "おかねを へんこう"
+          : "つかった おかねを へんこう";
+
+    }
+
+
+    if ($("date")) {
+
+      $("date").value =
+        tx.date ||
+        today();
+
+    }
+
+
+    if ($("amount")) {
+
+      $("amount").value =
+        tx.amount ||
+        "";
+
+    }
+
+
+    if ($("reason")) {
+
+      $("reason").value =
+        tx.reason ||
+        "";
+
+    }
+
+
+    if ($("memo")) {
+
+      $("memo").value =
+        tx.memo ||
+        "";
+
+    }
+
+
+  } else {
+
+    /*
+     * 新規追加
+     */
+
+    if ($("txType")) {
+
+      $("txType").value =
+        type;
+
+    }
+
+
+    if ($("txTitle")) {
+
+      $("txTitle").textContent =
+        type === "in"
+          ? "おかねを いれる"
+          : "おかねを つかう";
+
+    }
+
+
+    if ($("date")) {
+
+      $("date").value =
+        today();
+
+    }
+
+
+    if ($("amount")) {
+
+      $("amount").value =
+        "";
+
+    }
+
+
+    if ($("reason")) {
+
+      $("reason").selectedIndex =
+        0;
+
+    }
+
+
+    if ($("memo")) {
+
+      $("memo").value =
+        "";
+
+    }
+
+  }
+
+
+  /*
+   * 資産選択肢を生成
+   */
+
+  const assetSelect =
+    $("asset");
+
+
+  if (assetSelect) {
+
+    const currentAsset =
+      transactionId
+
+        ? child.transactions.find(
+            tx =>
+              tx.id ===
+              transactionId
+          )?.asset
+
+        : "cash";
+
+
+    assetSelect.innerHTML =
+      "";
+
+
+    for (
+      const [
+        key,
+        asset
+      ]
+      of Object.entries(
+        ASSETS
+      )
+    ) {
+
+      const option =
+        document.createElement(
+          "option"
+        );
+
+
+      option.value =
+        key;
+
+
+      option.textContent =
+        asset.icon +
+        " " +
+        assetName(
+          key
+        );
+
+
+      if (
+        key ===
+        currentAsset
+      ) {
+
+        option.selected =
+          true;
+
+      }
+
+
+      assetSelect.appendChild(
+        option
+      );
+
+    }
+
+  }
+
+
+  const submit =
+    $("txForm")
+      ?.querySelector(
+        'button[type="submit"]'
+      );
+
+
+  if (submit) {
+
+    submit.textContent =
+      transactionId
+        ? "変更を ほぞん"
+        : "きろくする";
+
+  }
+
+
+  $("txModal")
+    ?.classList
+    .remove(
+      "hidden"
+    );
+
+}
+
+
+/* ============================================================
+   Transaction保存
+============================================================ */
+
+function handleTransactionSubmit(
+  event
+) {
+
+  event.preventDefault();
+
+
+  const child =
+    getCurrentChild();
+
+
+  if (!child) {
+    return;
+  }
+
+
+  const type =
+    $("txType")
+      ?.value ||
+    "in";
+
+
+  const amount =
+    Number(
+      $("amount")
+        ?.value
+    );
+
+
+  const asset =
+    $("asset")
+      ?.value ||
+    "cash";
+
+
+  const date =
+    $("date")
+      ?.value ||
+    today();
+
+
+  const reason =
+    $("reason")
+      ?.value ||
+    "";
+
+
+  const memo =
+    $("memo")
+      ?.value
+      ?.trim() ||
+    "";
+
+
+  if (
+    !Number.isFinite(
+      amount
+    ) ||
+    amount <= 0
+  ) {
+
+    alert(
+      "いくらかを いれてください。"
+    );
+
+    return;
+
+  }
+
+
+  /*
+   * 編集対象
+   */
+
+  let editingTx =
+    null;
+
+
+  let editingIndex =
+    -1;
+
+
+  if (
+    editingTransactionId
+  ) {
+
+    editingIndex =
+      child.transactions.findIndex(
+        tx =>
+          tx.id ===
+          editingTransactionId
+      );
+
+
+    if (
+      editingIndex >= 0
+    ) {
+
+      editingTx =
+        child.transactions[
+          editingIndex
+        ];
+
+    }
+
+  }
+
+
+  /*
+   * 残高チェック用に、
+   * 編集対象を一旦除外。
+   */
+
+  if (
+    editingIndex >= 0
+  ) {
+
+    child.transactions.splice(
+      editingIndex,
+      1
+    );
+
+  }
+
+
+  /*
+   * 出金の場合の残高チェック
+   */
+
+  if (
+    type ===
+    "out"
+  ) {
+
+    const current =
+      calculateChild(
+        child
+      );
+
+
+    const available =
+      current.balances[
+        asset
+      ] ||
+      0;
+
+
+    if (
+      amount >
+      available +
+      0.0001
+    ) {
+
+      /*
+       * 編集前データを復元
+       */
+
+      if (
+        editingTx
+      ) {
+
+        child.transactions.splice(
+          editingIndex,
+          0,
+          editingTx
+        );
+
+      }
+
+
+      alert(
+
+        "のこっている おかねより おおきいよ。\n\n" +
+
+        "のこり：" +
+
+        yen(
+          available
+        )
+
+      );
+
+
+      return;
+
+    }
+
+  }
+
+
+  /*
+   * 投資の場合は取引時点の指数を取得
+   */
+
+  let indexAtTransaction =
+    null;
+
+
+  if (
+    asset === "world" ||
+    asset === "sp"
+  ) {
+
+    indexAtTransaction =
+      getIndexValue(
+        asset,
+        date
+      );
+
+  }
+
+
+  const tx = {
+
+    id:
+      editingTx?.id ||
+      createId(),
+
+    type,
+
+    date,
+
+    amount,
+
+    reason,
+
+    asset,
+
+    memo,
+
+    indexAtTransaction,
+
+    createdAt:
+      editingTx?.createdAt ||
+      new Date().toISOString()
+
+  };
+
+
+  /*
+   * 編集なら同じ位置へ戻す。
+   * 新規なら末尾へ追加。
+   */
+
+  if (
+    editingIndex >= 0
+  ) {
+
+    child.transactions.splice(
+      editingIndex,
+      0,
+      tx
+    );
+
+  } else {
+
+    child.transactions.push(
+      tx
+    );
+
+  }
+
+
+  saveState();
+
+
+  closeModal(
+    "txModal"
+  );
+
+
+  editingTransactionId =
+    null;
+
+
+  event.target.reset();
+
+
+  renderAll();
+
+}
+
+
+/* ============================================================
+   Transaction 編集
+============================================================ */
+
+function editTransaction(
+  transactionId
+) {
+
+  openTransactionModal(
+    "edit",
+    transactionId
+  );
+
+}
+
+
+/* ============================================================
+   Transaction 削除
+============================================================ */
+
+function deleteTransaction(
+  transactionId
+) {
+
+  const child =
+    getCurrentChild();
+
+
+  if (!child) {
+    return;
+  }
+
+
+  const index =
+    child.transactions.findIndex(
+      tx =>
+        tx.id ===
+        transactionId
+    );
+
+
+  if (
+    index < 0
+  ) {
+    return;
+  }
+
+
+  const tx =
+    child.transactions[
+      index
+    ];
+
+
+  const label =
+    tx.type === "in"
+      ? "入金"
+      : "出金";
+
+
+  const ok =
+    confirm(
+
+      `${label} ${yen(tx.amount)} の記録を削除しますか？\n\n` +
+
+      `${tx.date}\n` +
+
+      `${tx.reason || ""}`
+
+    );
+
+
+  if (!ok) {
+    return;
+  }
+
+
+  child.transactions.splice(
+    index,
+    1
+  );
+
+
+  saveState();
+
+
+  renderAll();
+
+}
+
+
+/* ============================================================
+   TRANSACTION RENDER
+============================================================ */
+
+function renderTransactions() {
+
+  const child =
+    getCurrentChild();
+
+
+  const container =
+    $("txs");
+
+
+  if (!container) {
+    return;
+  }
+
+
+  const typeFilter =
+    $("tf")
+      ?.value ||
+    "all";
+
+
+  const assetFilter =
+    $("af")
+      ?.value ||
+    "all";
+
+
+  let transactions =
+    [
+      ...(child?.transactions || [])
+    ];
+
+
+  if (
+    typeFilter !==
+    "all"
+  ) {
+
+    transactions =
+      transactions.filter(
+        tx =>
+          tx.type ===
+          typeFilter
+      );
+
+  }
+
+
+  if (
+    assetFilter !==
+    "all"
+  ) {
+
+    transactions =
+      transactions.filter(
+        tx =>
+          tx.asset ===
+          assetFilter
+      );
+
+  }
+
+
+  transactions.sort(
+    (
+      a,
+      b
+    ) =>
+      String(
+        b.date
+      ).localeCompare(
+        String(
+          a.date
+        )
+      )
+  );
+
+
+  if (
+    !transactions.length
+  ) {
+
+    container.innerHTML = `
+
+      <div class="card muted">
+
+        ${
+          kidMode
+            ? "まだ きろくが ありません。"
+            : "取引履歴がありません。"
+        }
+
+      </div>
+
+    `;
+
+
+    return;
+
+  }
+
+
+  container.innerHTML =
+    "";
+
+
+  for (
+    const tx of transactions
+  ) {
+
+    const card =
+      document.createElement(
+        "div"
+      );
+
+
+    card.className =
+      "card";
+
+
+    const sign =
+      tx.type === "in"
+        ? "＋"
+        : "−";
+
+
+    const marketIndex =
+      (
+        tx.asset === "world" ||
+        tx.asset === "sp"
+      )
+
+        ? getIndexValue(
+            tx.asset,
+            tx.date
+          )
+
+        : null;
+
+
+    let indexInfo =
+      "";
+
+
+    if (
+      marketIndex
+    ) {
+
+      indexInfo = `
+
+        <div class="meta">
+
+          ${
+            tx.type === "in"
+              ? "いれたとき"
+              : "つかったとき"
+          }
+
+          の指数：
+
+          ${marketIndex.toLocaleString()}
+
+        </div>
+
+      `;
+
+    }
+
+
+    card.innerHTML = `
+
+      <div class="section-header">
+
+        <strong>
+
+          ${escapeHtml(
+            tx.date
+          )}
+
+          ·
+
+          ${sign}${yen(
+            tx.amount
+          )}
+
+        </strong>
+
+
+        <div class="button-group">
+
+          <button
+            type="button"
+            class="secondary"
+            data-tx-edit="${escapeHtml(
+              tx.id
+            )}"
+          >
+
+            ✏️ 編集
+
+          </button>
+
+
+          <button
+            type="button"
+            class="secondary"
+            data-tx-delete="${escapeHtml(
+              tx.id
+            )}"
+          >
+
+            🗑️ 削除
+
+          </button>
+
+        </div>
+
+      </div>
+
+
+      <div>
+
+        ${escapeHtml(
+          tx.reason || ""
+        )}
+
+        ·
+
+        ${
+          ASSETS[
+            tx.asset
+          ]?.icon ||
+          "💰"
+        }
+
+        ${escapeHtml(
+          assetName(
+            tx.asset
+          )
+        )}
+
+      </div>
+
+
+      ${indexInfo}
+
+
+      ${
+        tx.memo
+
+          ? `
+
+            <div class="meta">
+
+              ${escapeHtml(
+                tx.memo
+              )}
+
+            </div>
+
+          `
+
+          : ""
+
+      }
+
+    `;
+
+
+    container.appendChild(
+      card
+    );
+
+  }
+
+}
+
+
+/* ============================================================
+   動的ボタンイベント
+============================================================ */
+
+document.addEventListener(
+  "click",
+  event => {
+
+    const childEdit =
+      event.target.closest(
+        "[data-child-edit]"
+      );
+
+
+    if (
+      childEdit
+    ) {
+
+      event.preventDefault();
+
+
+      openChildModal(
+        childEdit.dataset.childEdit
+      );
+
+
+      return;
+
+    }
+
+
+    const childDelete =
+      event.target.closest(
+        "[data-child-delete]"
+      );
+
+
+    if (
+      childDelete
+    ) {
+
+      event.preventDefault();
+
+
+      selectedChildId =
+        childDelete.dataset.childDelete;
+
+
+      deleteCurrentChild();
+
+
+      return;
+
+    }
+
+
+    const txEdit =
+      event.target.closest(
+        "[data-tx-edit]"
+      );
+
+
+    if (
+      txEdit
+    ) {
+
+      event.preventDefault();
+
+
+      editTransaction(
+        txEdit.dataset.txEdit
+      );
+
+
+      return;
+
+    }
+
+
+    const txDelete =
+      event.target.closest(
+        "[data-tx-delete]"
+      );
+
+
+    if (
+      txDelete
+    ) {
+
+      event.preventDefault();
+
+
+      deleteTransaction(
+        txDelete.dataset.txDelete
+      );
+
+
+    }
+
+  }
+);
+
+
+/* ============================================================
+   子ども選択欄の管理ボタン補完
+============================================================ */
+
+function ensureChildManagementButtons() {
+
+  const select =
+    $("child");
+
+
+  if (!select) {
+    return;
+  }
+
+
+  const parent =
+    select.parentElement;
+
+
+  if (!parent) {
+    return;
+  }
+
+
+  if (
+    !document.getElementById(
+      "editChild"
+    )
+  ) {
+
+    const button =
+      document.createElement(
+        "button"
+      );
+
+
+    button.id =
+      "editChild";
+
+
+    button.type =
+      "button";
+
+
+    button.className =
+      "secondary";
+
+
+    button.textContent =
+      "✏️ 編集";
+
+
+    button.addEventListener(
+      "click",
+      () => {
+
+        if (
+          selectedChildId
+        ) {
+
+          openChildModal(
+            selectedChildId
+          );
+
+        }
+
+      }
+    );
+
+
+    parent.appendChild(
+      button
+    );
+
+  }
+
+
+  if (
+    !document.getElementById(
+      "deleteChild"
+    )
+  ) {
+
+    const button =
+      document.createElement(
+        "button"
+      );
+
+
+    button.id =
+      "deleteChild";
+
+
+    button.type =
+      "button";
+
+
+    button.className =
+      "secondary";
+
+
+    button.textContent =
+      "🗑️ 削除";
+
+
+    button.addEventListener(
+      "click",
+      deleteCurrentChild
+    );
+
+
+    parent.appendChild(
+      button
+    );
+
+  }
+
+}
+
+
+/* ============================================================
+   初期化後の補完
+============================================================ */
+
+document.addEventListener(
+  "DOMContentLoaded",
+  () => {
+
+    /*
+     * 初期描画後に
+     * 子ども管理ボタンを作成。
+     */
+
+    ensureChildManagementButtons();
+
+
+    /*
+     * 「＋ついか」は
+     * 新規モードで開く。
+     */
+
+    $("addChild")
+      ?.addEventListener(
+        "click",
+        () => {
+
+          openChildModal(
+            null
+          );
+
+        }
+      );
+
+  }
+);
