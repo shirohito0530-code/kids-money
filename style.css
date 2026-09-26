@@ -31,7 +31,6 @@ body {
     "Yu Gothic",
     "Noto Sans JP",
     sans-serif;
-
   line-height: 1.6;
 }
 
@@ -46,6 +45,10 @@ button {
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
+}
+
+button:disabled {
+  cursor: default;
 }
 
 .site-header,
@@ -153,6 +156,24 @@ textarea {
   resize: vertical;
 }
 
+input[type="range"] {
+  min-height: auto;
+  padding: 0;
+}
+
+input[type="checkbox"] {
+  width: auto;
+  min-height: auto;
+}
+
+input:focus,
+select:focus,
+textarea:focus,
+button:focus-visible {
+  outline: 3px solid rgba(49, 94, 251, 0.16);
+  outline-offset: 1px;
+}
+
 .stats {
   display: grid;
   grid-template-columns: 2fr 1fr 1fr;
@@ -247,6 +268,14 @@ textarea {
   font-size: 20px;
 }
 
+.section-header h3 {
+  margin-top: 0;
+}
+
+.section-header > div > small {
+  color: var(--muted);
+}
+
 .button-group {
   display: flex;
   gap: 7px;
@@ -274,6 +303,18 @@ textarea {
 .danger {
   background: #fff0f0;
   color: var(--red);
+}
+
+.primary:hover {
+  filter: brightness(0.97);
+}
+
+.secondary:hover {
+  background: #e5e9f0;
+}
+
+.danger:hover {
+  background: #ffe4e4;
 }
 
 .wide {
@@ -424,6 +465,10 @@ form label,
   font-size: 12px;
 }
 
+/* ============================================================
+   GOALS
+============================================================ */
+
 .goal {
   border: 1px solid var(--line);
   border-radius: 15px;
@@ -448,6 +493,7 @@ form label,
   display: block;
   height: 100%;
   background: var(--blue);
+  border-radius: inherit;
 }
 
 .goal-meta {
@@ -457,6 +503,14 @@ form label,
   color: var(--muted);
   font-size: 12px;
 }
+
+#goalsList {
+  margin-bottom: 14px;
+}
+
+/* ============================================================
+   SWITCH
+============================================================ */
 
 .switch {
   display: flex;
@@ -470,6 +524,10 @@ form label,
   width: auto;
   min-height: auto;
 }
+
+/* ============================================================
+   MODAL
+============================================================ */
 
 .modal {
   position: fixed;
@@ -524,6 +582,10 @@ form label,
   display: none;
 }
 
+/* ============================================================
+   ERROR
+============================================================ */
+
 .error-box {
   position: fixed;
   left: 12px;
@@ -554,10 +616,9 @@ canvas {
   display: block;
 }
 
-
-/* =========================
+/* ============================================================
    TABLET
-========================= */
+============================================================ */
 
 @media (max-width: 700px) {
 
@@ -580,10 +641,9 @@ canvas {
 
 }
 
-
-/* =========================
+/* ============================================================
    SMARTPHONE
-========================= */
+============================================================ */
 
 @media (max-width: 460px) {
 
@@ -711,6 +771,11 @@ canvas {
   overflow-x: auto;
   padding-bottom: 12px;
   margin-bottom: 10px;
+  scrollbar-width: none;
+}
+
+.learn-filter::-webkit-scrollbar {
+  display: none;
 }
 
 .learn-filter button {
@@ -888,7 +953,7 @@ canvas {
 }
 
 /* ============================================================
-   MOBILE
+   V2.3 LEARNING MOBILE
 ============================================================ */
 
 @media (max-width: 700px) {
@@ -933,6 +998,7 @@ canvas {
     width: 100%;
   }
 }
+
 /* ============================================================
    V2.7 EDUCATION CENTER
 ============================================================ */
@@ -1055,6 +1121,11 @@ canvas {
   gap: 8px;
   overflow-x: auto;
   margin-bottom: 14px;
+  scrollbar-width: none;
+}
+
+.simulation-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .simulation-tabs button {
@@ -1108,10 +1179,18 @@ canvas {
   border-radius: 14px;
   padding: 16px;
   cursor: pointer;
+  transition:
+    background .15s ease,
+    border-color .15s ease,
+    transform .1s ease;
 }
 
 .quiz-option:hover {
   background: #f8fafc;
+}
+
+.quiz-option:active {
+  transform: scale(.99);
 }
 
 .quiz-option:disabled {
@@ -1131,6 +1210,97 @@ canvas {
   font-size: 46px;
 }
 
+/* ============================================================
+   V2.7 LEARNING HISTORY
+============================================================ */
+
+.learning-history {
+  display: grid;
+  gap: 10px;
+}
+
+.learning-history-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.learning-history-main {
+  min-width: 0;
+}
+
+.learning-history-main strong {
+  display: block;
+  margin-bottom: 3px;
+}
+
+.learning-history-main small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.learning-history-score {
+  flex: 0 0 auto;
+  min-width: 64px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: var(--blue-light);
+  color: var(--blue);
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.learning-history-empty {
+  padding: 20px;
+  border: 1px dashed var(--line);
+  border-radius: 14px;
+  background: #fafbfc;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* ============================================================
+   V2.7 QUIZ FEEDBACK
+============================================================ */
+
+.quiz-option.correct {
+  border-color: #8bd5bd;
+  background: #ecfdf5;
+}
+
+.quiz-option.incorrect {
+  border-color: #f3a5a5;
+  background: #fff1f2;
+}
+
+.quiz-feedback {
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.quiz-feedback.correct {
+  background: #ecfdf5;
+  color: #126b50;
+}
+
+.quiz-feedback.incorrect {
+  background: #fff1f2;
+  color: #9f2d2d;
+}
+
+/* ============================================================
+   V2.7 EDUCATION MOBILE
+============================================================ */
+
 @media (max-width: 700px) {
 
   .education-menu {
@@ -1149,6 +1319,53 @@ canvas {
 
   .simulation-number {
     font-size: 28px;
+  }
+
+  .learning-history-item {
+    align-items: flex-start;
+  }
+
+}
+
+/* ============================================================
+   SMALL MOBILE
+============================================================ */
+
+@media (max-width: 460px) {
+
+  .education-summary,
+  .education-stat-grid {
+    gap: 8px;
+  }
+
+  .education-summary > div,
+  .education-stat-grid > div {
+    padding: 12px 8px;
+  }
+
+  .education-summary strong,
+  .education-stat-grid strong {
+    font-size: 20px;
+  }
+
+  .education-menu-card {
+    padding: 16px;
+  }
+
+  .education-big-icon {
+    font-size: 48px;
+  }
+
+  .quiz-option {
+    padding: 14px;
+  }
+
+  .learning-history-item {
+    flex-direction: column;
+  }
+
+  .learning-history-score {
+    align-self: flex-start;
   }
 
 }
