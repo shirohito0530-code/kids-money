@@ -101,7 +101,9 @@ Bさん
 */
 let quizDecksByChild = {};
 
-const QUIZ_DECK_STORAGE_KEY = "kidsMoneyQuizDecksV30";
+const QUIZ_DECK_STORAGE_KEY = "kidsMoneyQuizDecksV31";
+const QUIZ_DECK_VERSION = 31;
+let recentQuizQuestionIdsByChild = {};
 
 
 /* ============================================================
@@ -207,78 +209,120 @@ function normalizeEducationState(parsed) {
    LOAD / SAVE EDUCATION STATE
 ============================================================ */
 
-function loadEducationState() {
+function getAppChildren() {
   try {
-    const raw = localStorage.getItem(EDUCATION_STATE_KEY);
-
-    if (!raw) {
-      educationStatesByChild = {};
-      activeEducationChildId = getEducationChildId();
-      loadCurrentChildEducationState();
-      return;
+    if (typeof window.getKidsMoneyChildren === "function") {
+      return window.getKidsMoneyChildren();
     }
-
-    const parsed = JSON.parse(raw);
-
-    /*
-    V2.9/V3.0形式
-    {
-      version: 29,
-      children: {
-        childId: {...}
-      }
-    }
-    */
-    if (
-      parsed &&
-      typeof parsed === "object" &&
-      parsed.children &&
-      typeof parsed.children === "object"
-    ) {
-      educationStatesByChild = {};
-
-      for (const [childId, childState] of Object.entries(parsed.children)) {
-        educationStatesByChild[String(childId)] =
-          normalizeEducationState(childState);
-      }
-
-      activeEducationChildId = getEducationChildId();
-      loadCurrentChildEducationState();
-      return;
-    }
-
-    /*
-    旧V2.7/V2.8形式
-    */
-    if (parsed && typeof parsed === "object") {
-      const childId = getEducationChildId();
-
-      educationStatesByChild = {
-        [childId]: normalizeEducationState(parsed)
-      };
-
-      activeEducationChildId = childId;
-
-      saveAllEducationStates();
-      loadCurrentChildEducationState();
-
-      return;
-    }
-
-    educationStatesByChild = {};
-    activeEducationChildId = getEducationChildId();
-    loadCurrentChildEducationState();
-
   } catch (error) {
-    console.error("education state load error", error);
+    console.warn("children API unavailable", error);
+  }
+  return [];
+}
 
-    educationStatesByChild = {};
-    activeEducationChildId = getEducationChildId();
+function saveEducationToCurrentChild() {
+  const childId = activeEducationChildId;
+  if (!childId || childId === "default") return;
 
-    loadCurrentChildEducationState();
+  const child = getAppChildren().find(
+    item => String(item.id) === String(childId)
+  );
+
+  if (!child) return;
+
+  if (!child.learning || typeof child.learning !== "object") {
+    child.learning = {};
+  }
+
+  child.learning.education =
+    normalizeEducationState(educationState);
+
+  /*
+   * app.jsのstateを正本として保存する。
+   * これにより「子どもAの学習記録」が
+   * 子どもBへ混ざることを防ぐ。
+   */
+  try {
+    if (typeof saveState === "function") {
+      saveState();
+    }
+  } catch (error) {
+    console.warn("app state save failed", error);
   }
 }
 
+function loadEducationState() {
+  educationStatesByChild = {};
+
+  const children = getAppChildren();
+
+  /*
+   * まずapp.jsの子どもデータ内に保存された学習記録を使用。
+   */
+  for (const child of children) {
+    const childId = String(child.id);
+    const saved =
+      child?.learning?.education &&
+      typeof child.learning.education === "object"
+        ? child.learning.education
+        : null;
+
+    educationStatesByChild[childId] =
+      normalizeEducationState(saved);
+  }
+
+  /*
+   * 既存V2.9/V3.0のlocalStorageからも移行する。
+   * app.js側にまだ学習記録がない子どもだけを補完する。
+   */
+  try {
+    const raw = localStorage.getItem(EDUCATION_STATE_KEY);
+
+    if (raw) {
+      const parsed = JSON.parse(raw);
+
+      if (
+        parsed &&
+        typeof parsed === "object" &&
+        parsed.children &&
+        typeof parsed.children === "object"
+      ) {
+        for (const [childId, childState] of Object.entries(parsed.children)) {
+          if (!educationStatesByChild[String(childId)]) {
+            educationStatesByChild[String(childId)] =
+              normalizeEducationState(childState);
+          }
+        }
+      } else if (parsed && typeof parsed === "object") {
+        const currentId = getEducationChildId();
+        if (!educationStatesByChild[currentId]) {
+          educationStatesByChild[currentId] =
+            normalizeEducationState(parsed);
+        }
+      }
+    }
+  } catch (error) {
+    console.warn("legacy education state migration failed", error);
+  }
+
+  const currentId = getEducationChildId();
+
+  if (!educationStatesByChild[currentId]) {
+    educationStatesByChild[currentId] = createEducationState();
+  }
+
+  activeEducationChildId = currentId;
+  educationState =
+    normalizeEducationState(educationStatesByChild[currentId]);
+
+  /*
+   * 移行後はapp.js側にも保存。
+   */
+  saveEducationToCurrentChild();
+  saveAllEducationStates();
+
+  return educationState;
+}
 
 function loadCurrentChildEducationState(childId = null) {
   const targetChildId =
@@ -298,30 +342,25 @@ function loadCurrentChildEducationState(childId = null) {
 
   activeEducationChildId = targetChildId;
 
+  /*
+   * app.js側の現在の子どもにも同期。
+   */
+  saveEducationToCurrentChild();
+
   return educationState;
 }
 
-
-/*
-現在アクティブな子どもの教育状態を保存する。
-
-selectedChildIdではなく
-activeEducationChildIdを使用するのが重要。
-*/
 function saveActiveEducationState() {
-  if (
-    !activeEducationChildId ||
-    activeEducationChildId === "default"
-  ) {
+  if (!activeEducationChildId || activeEducationChildId === "default") {
     return;
   }
 
   educationStatesByChild[activeEducationChildId] =
     normalizeEducationState(educationState);
 
+  saveEducationToCurrentChild();
   saveAllEducationStates();
 }
-
 
 function saveAllEducationStates() {
   try {
@@ -337,11 +376,6 @@ function saveAllEducationStates() {
   }
 }
 
-
-/*
-外部互換用。
-既存コードからsaveEducationState()が呼ばれても壊れないようにする。
-*/
 function saveEducationState() {
   saveActiveEducationState();
 }
@@ -366,6 +400,9 @@ function refreshEducationForChildChange(eventDetail = null) {
   ) {
     educationStatesByChild[oldChildId] =
       normalizeEducationState(educationState);
+
+    /* 現在の子どもの記録をapp.js側にも確定保存 */
+    saveEducationToCurrentChild();
   }
 
   saveAllEducationStates();
@@ -2072,13 +2109,40 @@ function getQuizQuestions() {
           );
 
         /*
-        外部データに同じIDがあれば
-        外部データを優先。
-        */
-        questionMap.set(
-          id,
-          question
-        );
+         * 外部データは既存の内蔵問題を壊さないように
+         * マージする。特にkidQuestion / option.kid /
+         * kidExplanationを保持する。
+         */
+        const builtInQuestion = questionMap.get(id);
+
+        if (builtInQuestion) {
+          const merged = {
+            ...builtInQuestion,
+            ...question,
+            options: Array.isArray(question.options)
+              ? question.options.map((option, optionIndex) => {
+                  const baseOption = builtInQuestion.options?.[optionIndex];
+                  if (
+                    option &&
+                    typeof option === "object" &&
+                    baseOption &&
+                    typeof baseOption === "object"
+                  ) {
+                    return {
+                      ...baseOption,
+                      ...option,
+                      kid: option.kid ?? baseOption.kid
+                    };
+                  }
+                  return option;
+                })
+              : builtInQuestion.options
+          };
+
+          questionMap.set(id, merged);
+        } else {
+          questionMap.set(id, question);
+        }
       }
     }
   } catch (error) {
@@ -2100,61 +2164,52 @@ function getQuizQuestions() {
 
 function loadQuizDecks() {
   try {
-    const raw =
-      localStorage.getItem(
-        QUIZ_DECK_STORAGE_KEY
-      );
+    const raw = localStorage.getItem(QUIZ_DECK_STORAGE_KEY);
 
     if (!raw) {
       quizDecksByChild = {};
+      recentQuizQuestionIdsByChild = {};
       return;
     }
 
-    const parsed =
-      JSON.parse(raw);
+    const parsed = JSON.parse(raw);
 
-    if (
-      !parsed ||
-      typeof parsed !== "object"
-    ) {
+    if (!parsed || typeof parsed !== "object") {
       quizDecksByChild = {};
+      recentQuizQuestionIdsByChild = {};
       return;
     }
 
     quizDecksByChild =
-      parsed.children &&
-      typeof parsed.children === "object"
+      parsed.children && typeof parsed.children === "object"
         ? parsed.children
         : {};
 
+    recentQuizQuestionIdsByChild =
+      parsed.recent && typeof parsed.recent === "object"
+        ? parsed.recent
+        : {};
   } catch (error) {
-    console.warn(
-      "quiz deck load error",
-      error
-    );
-
+    console.warn("quiz deck load error", error);
     quizDecksByChild = {};
+    recentQuizQuestionIdsByChild = {};
   }
 }
-
 
 function saveQuizDecks() {
   try {
     localStorage.setItem(
       QUIZ_DECK_STORAGE_KEY,
       JSON.stringify({
-        version: 30,
-        children: quizDecksByChild
+        version: QUIZ_DECK_VERSION,
+        children: quizDecksByChild,
+        recent: recentQuizQuestionIdsByChild
       })
     );
   } catch (error) {
-    console.warn(
-      "quiz deck save error",
-      error
-    );
+    console.warn("quiz deck save error", error);
   }
 }
-
 
 function shuffleArray(array) {
   const result =
@@ -2188,160 +2243,100 @@ function shuffleArray(array) {
 }
 
 
-function ensureQuizDeckForChild(
-  childId = null,
-  forceReset = false
-) {
-  const id =
-    String(
-      childId ??
-      getEducationChildId()
-    );
+function getQuizIds() {
+  return getQuizQuestions().map((question, index) =>
+    String(question?.id ?? `question-${index}`)
+  );
+}
 
-  const questions =
-    getQuizQuestions();
+function ensureQuizDeckForChild(childId = null, forceReset = false) {
+  const id = String(childId ?? getEducationChildId());
+  const ids = getQuizIds();
 
-  const ids =
-    questions
-      .map((question, index) =>
-        String(
-          question?.id ??
-          `question-${index}`
-        )
-      );
-
-  const currentDeck =
-    Array.isArray(
-      quizDecksByChild[id]
-    )
-      ? quizDecksByChild[id]
-      : [];
-
-  const validIdSet =
-    new Set(ids);
-
-  const filteredDeck =
-    currentDeck.filter(
-      questionId =>
-        validIdSet.has(
-          String(questionId)
-        )
-    );
-
-  const missing =
-    ids.filter(
-      questionId =>
-        !filteredDeck.includes(
-          questionId
-        )
-    );
-
-  let deck =
-    forceReset
-      ? []
-      : filteredDeck;
-
-  /*
-  デッキが空なら全問題をシャッフル。
-  */
-  if (deck.length === 0) {
-    deck =
-      shuffleArray(ids);
-  } else if (missing.length > 0) {
-    /*
-    新しく追加された問題を
-    ランダムに末尾へ追加。
-    */
-    deck = [
-      ...deck,
-      ...shuffleArray(missing)
-    ];
+  if (!ids.length) {
+    quizDecksByChild[id] = [];
+    return [];
   }
 
-  quizDecksByChild[id] =
-    deck;
+  const valid = new Set(ids);
+  const existing = Array.isArray(quizDecksByChild[id])
+    ? quizDecksByChild[id].map(String).filter(qid => valid.has(qid))
+    : [];
 
+  const unique = [...new Set(existing)];
+  const missing = ids.filter(qid => !unique.includes(qid));
+
+  let deck = forceReset ? [] : unique;
+
+  if (!deck.length) {
+    deck = shuffleArray(ids);
+  } else if (missing.length) {
+    deck = [...deck, ...shuffleArray(missing)];
+  }
+
+  quizDecksByChild[id] = deck;
   saveQuizDecks();
-
   return deck;
 }
 
-
 function takeNextQuizQuestion() {
-  const childId =
-    getEducationChildId();
+  const childId = String(getEducationChildId());
+  const questions = getQuizQuestions();
 
-  let deck =
-    ensureQuizDeckForChild(
-      childId
-    );
+  if (!questions.length) return null;
 
-  const questions =
-    getQuizQuestions();
-
-  if (!questions.length) {
-    return null;
-  }
+  let deck = ensureQuizDeckForChild(childId);
+  const recent = Array.isArray(recentQuizQuestionIdsByChild[childId])
+    ? recentQuizQuestionIdsByChild[childId].map(String)
+    : [];
 
   /*
-  デッキが空なら新しく作る。
-  */
+   * 直前に出した問題を最優先で避ける。
+   * 問題が2問以上あれば、同じ問題の連続出題を必ず防止。
+   */
+  const lastId = recent[recent.length - 1] || null;
+
   if (!deck.length) {
-    deck =
-      ensureQuizDeckForChild(
-        childId,
-        true
-      );
+    deck = shuffleArray(getQuizIds());
   }
 
-  const questionId =
-    String(deck.shift());
+  let position = deck.findIndex(id => String(id) !== String(lastId));
 
   /*
-  デッキが全部なくなったら、
-  次回のために全問題を再シャッフル。
-  ただし今出した問題は次の問題にしない。
-  */
-  if (deck.length === 0) {
-    const allIds =
-      questions.map(
-        (question, index) =>
-          String(
-            question?.id ??
-            `question-${index}`
-          )
-      );
+   * デッキ内に別問題がない場合のみ同一問題を許可。
+   * 通常の12問構成ではここには到達しない。
+   */
+  if (position < 0) position = 0;
 
-    deck =
-      shuffleArray(
-        allIds.filter(
-          id =>
-            id !== questionId
-        )
-      );
+  const questionId = String(deck.splice(position, 1)[0]);
+
+  /*
+   * 1周分を使い切ったら、全問題を再シャッフル。
+   * 今出した問題は次周の先頭候補から外す。
+   */
+  if (!deck.length) {
+    deck = shuffleArray(
+      getQuizIds().filter(id => String(id) !== questionId)
+    );
   }
 
-  quizDecksByChild[childId] =
-    deck;
+  quizDecksByChild[childId] = deck;
+
+  const nextRecent = [...recent.filter(id => id !== questionId), questionId]
+    .slice(-5);
+  recentQuizQuestionIdsByChild[childId] = nextRecent;
 
   saveQuizDecks();
 
-  const index =
-    questions.findIndex(
-      question =>
-        String(
-          question?.id
-        ) === questionId
-    );
+  const index = questions.findIndex(
+    question => String(question?.id) === questionId
+  );
 
-  if (index < 0) {
-    return null;
-  }
+  if (index < 0) return null;
 
   return {
     index,
-    question:
-      questions[index]
+    question: questions[index]
   };
 }
 
@@ -2429,8 +2424,7 @@ function renderEducationQuiz(target) {
     educationIsKidMode()
       ? (
           question.kidQuestion ??
-          question.question ??
-          ""
+          "この もんだいの せつめいは じゅんびちゅうだよ。"
         )
       : (
           question.question ??
@@ -2480,8 +2474,7 @@ function renderEducationQuiz(target) {
                       educationIsKidMode()
                         ? (
                             option?.kid ??
-                            option?.text ??
-                            option
+                            "こたえを えらんでね"
                           )
                         : (
                             option?.text ??
@@ -2670,8 +2663,7 @@ function processQuizAnswer(
     educationIsKidMode()
       ? (
           question.kidExplanation ??
-          question.explanation ??
-          ""
+          "せつめいを じゅんびしているよ。"
         )
       : (
           question.explanation ??
@@ -4093,9 +4085,18 @@ window.addEventListener(
   event => {
 
     try {
-      refreshEducationForChildChange(
-        event?.detail || null
-      );
+      const detail = event?.detail || null;
+
+      if (
+        detail.reason === "delete" &&
+        detail.previousChildId
+      ) {
+        delete educationStatesByChild[String(detail.previousChildId)];
+        saveQuizDecks();
+        saveAllEducationStates();
+      }
+
+      refreshEducationForChildChange(detail);
     } catch (error) {
       console.error(
         "education child change error",

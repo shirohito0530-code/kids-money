@@ -11,7 +11,7 @@ const MARKET_KEY = "kidsMoneyMarketV22";
 const SELECTED_CHILD_KEY = "kidsMoneySelectedChildV22";
 const KID_MODE_KEY = "kidsMoneyKidMode";
 
-const APP_VERSION = 25;
+const APP_VERSION = 26;
 const MARKET_DATA_URL = "./data/market.json";
 
 const ASSETS = {
@@ -393,6 +393,10 @@ window.getKidsMoneyTodayMoney = function () {
 window.getKidsMoneyCurrentChildName = function () {
   const child = getCurrentChild();
   return child?.name || "";
+};
+
+window.renderKidsMoneyTodayMoney = function () {
+  renderTodayMoney();
 };
 
 
@@ -949,136 +953,77 @@ function calculateChild(child) {
 
 function renderChildSelector() {
   const select = $("child");
+  if (!select || !state || !Array.isArray(state.children)) return;
 
-  if (
-    !select ||
-    !state ||
-    !Array.isArray(state.children)
-  ) {
-    return;
-  }
-
-  if (
-    !state.children.some(
-      child =>
-        child.id === selectedChildId
-    )
-  ) {
-    selectedChildId =
-      state.children[0]?.id || null;
-
+  if (!state.children.some(child => child.id === selectedChildId)) {
+    selectedChildId = state.children[0]?.id || null;
     saveSelectedChildId();
   }
 
   select.innerHTML = "";
 
-  for (
-    const child of state.children
-  ) {
-    const option =
-      document.createElement(
-        "option"
-      );
-
+  for (const child of state.children) {
+    const option = document.createElement("option");
     option.value = child.id;
-    option.textContent =
-      child.name;
-
-    option.selected =
-      child.id === selectedChildId;
-
+    option.textContent = child.name;
+    option.selected = child.id === selectedChildId;
     select.appendChild(option);
   }
 
-  select.value =
-    selectedChildId || "";
+  select.value = selectedChildId || "";
 
+  const current = getCurrentChild();
 
-  /*
-   * 現在の子どもの名前を
-   * 別表示領域があれば更新。
-   */
-  const selectedName =
-    $("selectedChildName");
-
+  const selectedName = $("selectedChildName");
   if (selectedName) {
-    const child =
-      getCurrentChild();
-
-    selectedName.textContent =
-      child?.name || "";
-
-    selectedName.classList.add(
-      "selected-child"
-    );
+    selectedName.textContent = current?.name || "";
+    selectedName.classList.add("selected-child");
   }
-
 
   /*
-   * 編集・削除ボタンを再生成。
-   *
-   * 既存HTMLとの互換性を保ちつつ、
-   * select と同じ親に配置する。
+   * 編集・削除は専用領域に描画する。
+   * selectと同じ行に追加しないため、
+   * iPhoneでも「今の子ども」が十分な幅で表示される。
    */
-  const parent =
-    select.parentElement;
+  const actionContainer = $("childActions");
+  const legacyParent = select.parentElement;
 
-  if (!parent) {
-    return;
+  if (actionContainer) {
+    actionContainer.innerHTML = "";
+
+    const editButton = document.createElement("button");
+    editButton.type = "button";
+    editButton.className = "secondary";
+    editButton.dataset.childEdit = selectedChildId || "";
+    editButton.textContent = kidMode ? "✏️ なまえを なおす" : "✏️ 名前を変更";
+
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.className = "danger";
+    deleteButton.dataset.childDelete = selectedChildId || "";
+    deleteButton.textContent = kidMode ? "🗑️ けす" : "🗑️ 削除";
+
+    actionContainer.appendChild(editButton);
+    actionContainer.appendChild(deleteButton);
+  } else if (legacyParent) {
+    legacyParent.querySelectorAll("[data-child-edit], [data-child-delete]")
+      .forEach(button => button.remove());
+
+    const editButton = document.createElement("button");
+    editButton.type = "button";
+    editButton.className = "secondary";
+    editButton.dataset.childEdit = selectedChildId || "";
+    editButton.textContent = kidMode ? "✏️ なまえ" : "✏️ 編集";
+
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.className = "danger";
+    deleteButton.dataset.childDelete = selectedChildId || "";
+    deleteButton.textContent = kidMode ? "🗑️ けす" : "🗑️ 削除";
+
+    legacyParent.appendChild(editButton);
+    legacyParent.appendChild(deleteButton);
   }
-
-  parent
-    .querySelectorAll(
-      "[data-child-edit], [data-child-delete]"
-    )
-    .forEach(
-      button => button.remove()
-    );
-
-
-  const editButton =
-    document.createElement(
-      "button"
-    );
-
-  editButton.type = "button";
-  editButton.className =
-    "secondary";
-
-  editButton.dataset.childEdit =
-    selectedChildId || "";
-
-  editButton.textContent =
-    kidMode
-      ? "✏️ なまえ"
-      : "✏️ 編集";
-
-
-  const deleteButton =
-    document.createElement(
-      "button"
-    );
-
-  deleteButton.type = "button";
-  deleteButton.className =
-    "secondary";
-
-  deleteButton.dataset.childDelete =
-    selectedChildId || "";
-
-  deleteButton.textContent =
-    kidMode
-      ? "🗑️ けす"
-      : "🗑️ 削除";
-
-
-  parent.appendChild(
-    editButton
-  );
-
-  parent.appendChild(
-    deleteButton
-  );
 }
 
 
@@ -1249,150 +1194,79 @@ function calculateTodayMoney(child) {
  * その場合は内部の専用要素を探す。
  */
 function renderTodayMoney() {
-  const child =
-    getCurrentChild();
+  const child = getCurrentChild();
+  const result = calculateTodayMoney(child);
 
-  const result =
-    calculateTodayMoney(child);
-
-
-  const directContainers = [
+  /*
+   * 今日のお金は専用コンテナだけを描画する。
+   * #today のようなパネル自体を上書きしない。
+   */
+  const containers = [
+    $("todayMoneyContent"),
     $("todayMoney"),
     $("today-money"),
     $("todayMoneyList"),
     $("todayList")
   ].filter(Boolean);
 
+  const unique = [...new Set(containers)];
 
-  /*
-   * #today が専用の表示領域なら利用。
-   */
-  const todayPanel =
-    $("today");
+  if (!unique.length) return;
 
+  const childName = child?.name || "";
 
-  let containers =
-    [...directContainers];
-
-
-  if (todayPanel) {
-    if (
-      !todayPanel.classList.contains(
-        "panel"
-      )
-    ) {
-      containers.push(
-        todayPanel
-      );
-    } else {
-      /*
-       * panel の中から
-       * 専用コンテナを探す。
-       */
-      const inner =
-        todayPanel.querySelector(
-          "#todayMoney, #today-money, #todayMoneyList, #todayList, .today-money-content"
-        );
-
-      if (inner) {
-        containers.push(inner);
-      }
-    }
+  if ($("todayMoneyLabel")) {
+    $("todayMoneyLabel").textContent = kidMode ? "きょう" : "今日";
+  }
+  if ($("todayMoneyTitle")) {
+    $("todayMoneyTitle").textContent = kidMode
+      ? "💰 きょうの おかね"
+      : "💰 今日のお金";
   }
 
-
-  /*
-   * 重複排除。
-   */
-  containers =
-    Array.from(
-      new Set(containers)
-    );
-
-
-  if (!containers.length) {
-    return;
-  }
-
-
-  for (
-    const container of containers
-  ) {
-
-    /*
-     * 「今日のお金」専用の表示領域。
-     *
-     * 取引がない場合でも
-     * loading のままにしない。
-     */
-    if (result.count === 0) {
-
-      container.innerHTML = `
-        <div class="card muted">
-          ${
-            kidMode
-              ? "きょうの おかねは まだ ないよ。"
-              : "今日のお金の記録はありません。"
-          }
-        </div>
-      `;
-
-      continue;
-    }
-
-
-    container.innerHTML = `
-      <div class="today-money-grid">
-
-        <div class="card">
-          <div class="meta">
-            ${
-              kidMode
-                ? "はいった おかね"
-                : "今日の入金"
-            }
-          </div>
-
-          <div class="value">
-            ${yen(result.income)}
-          </div>
-        </div>
-
-
-        <div class="card">
-          <div class="meta">
-            ${
-              kidMode
-                ? "つかった おかね"
-                : "今日の出金"
-            }
-          </div>
-
-          <div class="value">
-            ${yen(result.outcome)}
-          </div>
-        </div>
-
-
-        <div class="card">
-          <div class="meta">
-            ${
-              kidMode
-                ? "きょうの さ"
-                : "今日の差額"
-            }
-          </div>
-
-          <div class="value">
-            ${signedYen(result.net)}
-          </div>
-        </div>
-
+  const html = `
+    <div class="today-money-header">
+      <div>
+        <small>${kidMode ? "いまの おともだち" : "現在の対象"}</small>
+        <strong>${escapeHtml(childName)}</strong>
       </div>
-    `;
-  }
-}
+      <span class="today-money-icon">💰</span>
+    </div>
 
+    <div class="today-money-grid">
+      <div class="card">
+        <div class="meta">${kidMode ? "はいった おかね" : "今日の入金"}</div>
+        <div class="value">${yen(result.income)}</div>
+      </div>
+
+      <div class="card">
+        <div class="meta">${kidMode ? "つかった おかね" : "今日の出金"}</div>
+        <div class="value">${yen(result.outcome)}</div>
+      </div>
+
+      <div class="card">
+        <div class="meta">${kidMode ? "きょうの さ" : "今日の差額"}</div>
+        <div class="value">${signedYen(result.net)}</div>
+      </div>
+    </div>
+
+    <p class="muted today-money-message">
+      ${
+        result.count === 0
+          ? (kidMode
+              ? "きょうの おかねの きろくは まだ ないよ。"
+              : "今日のお金の記録はありません。")
+          : (kidMode
+              ? `きょうは ${result.count}けんの きろくが あるよ。`
+              : `今日は${result.count}件の記録があります。`)
+      }
+    </p>
+  `;
+
+  unique.forEach(container => {
+    container.innerHTML = html;
+  });
+}
 
 /* ============================================================
  * Assets
@@ -4081,7 +3955,7 @@ function exportData() {
     url;
 
   anchor.download =
-    "kids-money-v25.json";
+    "kids-money-v26.json";
 
 
   anchor.click();

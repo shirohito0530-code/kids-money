@@ -152,6 +152,150 @@ textarea {
   color: var(--text);
 }
 
+/* ============================================================
+   V2.6 CHILD SELECTOR
+============================================================ */
+
+.selected-child-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 72px;
+  padding: 12px;
+  border: 2px solid var(--blue);
+  border-radius: 16px;
+  background: #f7f9ff;
+}
+
+.selected-child-icon {
+  flex: 0 0 auto;
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #fff;
+  font-size: 25px;
+}
+
+.selected-child-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.selected-child-main small {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.selected-child-main select {
+  min-height: 44px;
+  border: 0;
+  padding: 4px 32px 4px 0;
+  background: transparent;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.child-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.child-actions button {
+  flex: 1;
+  min-height: 42px;
+}
+
+.child-add-button {
+  width: 100%;
+  margin-top: 8px;
+}
+
+/* ============================================================
+   V2.6 TODAY MONEY
+============================================================ */
+
+.today-money-panel {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.today-money-content {
+  display: block;
+}
+
+.today-money-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: #f8f9fc;
+}
+
+.today-money-header small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.today-money-header strong {
+  display: block;
+  margin-top: 2px;
+  font-size: 18px;
+}
+
+.today-money-icon {
+  font-size: 30px;
+}
+
+.today-money-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.today-money-grid .card {
+  margin: 0;
+}
+
+.today-money-message {
+  margin: 10px 2px 0;
+}
+
+/* ============================================================
+   V2.6 EDUCATION CURRENT CHILD
+============================================================ */
+
+.education-current-child-large {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px;
+  margin-bottom: 18px;
+  border: 2px solid var(--blue);
+  border-radius: 18px;
+  background: #f7f9ff;
+}
+
+.education-current-child-icon {
+  flex: 0 0 auto;
+}
+
+.education-current-child-info strong {
+  display: block;
+  font-size: 24px;
+  margin-top: 3px;
+}
+
+
 textarea {
   resize: vertical;
 }
@@ -667,6 +811,31 @@ canvas {
 
   .inline {
     width: 100%;
+  }
+
+  .selected-child-card {
+    min-height: 78px;
+  }
+
+  .selected-child-main select {
+    font-size: 19px;
+  }
+
+  .child-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .today-money-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .education-current-child-large {
+    padding: 15px;
+  }
+
+  .education-current-child-info strong {
+    font-size: 21px;
   }
 
   .grid,
