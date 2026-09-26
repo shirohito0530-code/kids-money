@@ -3,7 +3,7 @@
 /* ============================================================
  * こどもマネー・ラボ
  * app.js
- * Version 25
+ * Version 27
  * ============================================================ */
 
 const STORAGE_KEY = "kidsMoneyLabV22";
@@ -11,7 +11,9 @@ const MARKET_KEY = "kidsMoneyMarketV22";
 const SELECTED_CHILD_KEY = "kidsMoneySelectedChildV22";
 const KID_MODE_KEY = "kidsMoneyKidMode";
 
-const APP_VERSION = 26;
+const APP_VERSION = 27;
+const APP_API_VERSION = 27;
+window.KIDS_MONEY_APP_API_VERSION = APP_API_VERSION;
 const MARKET_DATA_URL = "./data/market.json";
 
 const ASSETS = {

@@ -29,7 +29,7 @@
 ============================================================ */
 
 const EDUCATION_STATE_KEY = "kidsMoneyEducationV29";
-const EDUCATION_STATE_VERSION = 30;
+const EDUCATION_STATE_VERSION = 27;
 
 const DEFAULT_EDUCATION_STATE = {
   quizCorrect: 0,
@@ -102,7 +102,7 @@ Bさん
 let quizDecksByChild = {};
 
 const QUIZ_DECK_STORAGE_KEY = "kidsMoneyQuizDecksV31";
-const QUIZ_DECK_VERSION = 31;
+const QUIZ_DECK_VERSION = 27;
 let recentQuizQuestionIdsByChild = {};
 
 
@@ -272,13 +272,20 @@ function loadEducationState() {
   }
 
   /*
-   * 既存V2.9/V3.0のlocalStorageからも移行する。
+   * 既存V2.6以前のlocalStorageからも移行する。
    * app.js側にまだ学習記録がない子どもだけを補完する。
    */
   try {
-    const raw = localStorage.getItem(EDUCATION_STATE_KEY);
+    const legacyKeys = [
+      EDUCATION_STATE_KEY,
+      "kidsMoneyEducationV30",
+      "kidsMoneyEducationV29",
+      "kidsMoneyEducationV28"
+    ];
 
-    if (raw) {
+    for (const key of [...new Set(legacyKeys)]) {
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
       const parsed = JSON.parse(raw);
 
       if (
@@ -2164,15 +2171,25 @@ function getQuizQuestions() {
 
 function loadQuizDecks() {
   try {
-    const raw = localStorage.getItem(QUIZ_DECK_STORAGE_KEY);
+    const keys = [QUIZ_DECK_STORAGE_KEY, "kidsMoneyQuizDecksV31"];
+    let parsed = null;
 
-    if (!raw) {
+    for (const key of [...new Set(keys)]) {
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      try {
+        parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object") break;
+      } catch (error) {
+        console.warn("quiz deck parse error", key, error);
+      }
+    }
+
+    if (!parsed) {
       quizDecksByChild = {};
       recentQuizQuestionIdsByChild = {};
       return;
     }
-
-    const parsed = JSON.parse(raw);
 
     if (!parsed || typeof parsed !== "object") {
       quizDecksByChild = {};
