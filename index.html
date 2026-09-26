@@ -53,7 +53,6 @@
 
 </header>
 
-
 <main>
 
   <!-- =====================================================
@@ -86,7 +85,6 @@
 
       </div>
 
-
       <label class="switch">
 
         <input
@@ -104,7 +102,6 @@
 
     </div>
 
-
     <div class="stats">
 
       <div>
@@ -119,7 +116,6 @@
         <span id="note"></span>
       </div>
 
-
       <div>
         <small id="cashL">
           ためている
@@ -129,7 +125,6 @@
           ¥0
         </b>
       </div>
-
 
       <div>
         <small id="investL">
@@ -142,7 +137,6 @@
       </div>
 
     </div>
-
 
     <div class="summary">
 
@@ -171,9 +165,8 @@
 
   </section>
 
-
   <!-- =====================================================
-       NAVIGATION
+       NAV
   ====================================================== -->
 
   <nav
@@ -231,7 +224,6 @@
 
   </nav>
 
-
   <!-- =====================================================
        HOME
   ====================================================== -->
@@ -269,16 +261,12 @@
 
     </div>
 
-
     <div
       id="assets"
       class="grid"
     ></div>
 
-
-    <!-- =================================================
-         INDEX
-    ================================================== -->
+    <!-- INDEX -->
 
     <div class="card">
 
@@ -298,7 +286,6 @@
 
       </div>
 
-
       <div
         id="marketStatus"
         class="muted"
@@ -306,24 +293,18 @@
         まだ みていません
       </div>
 
-
       <div
         id="market"
         class="market-grid"
       ></div>
 
-
       <p class="notice">
         インデックスの値を使った教育用の参考表示です。
-        実際の投資成果を表すものではありません。
       </p>
 
     </div>
 
-
-    <!-- =================================================
-         DAILY LESSON
-    ================================================== -->
+    <!-- LESSON -->
 
     <div class="card lesson">
 
@@ -350,10 +331,7 @@
 
     </div>
 
-
-    <!-- =================================================
-         MONEY CHART
-    ================================================== -->
+    <!-- CHART -->
 
     <div class="card">
 
@@ -373,7 +351,6 @@
 
       </div>
 
-
       <canvas
         id="chart"
         height="220"
@@ -382,7 +359,6 @@
     </div>
 
   </section>
-
 
   <!-- =====================================================
        MONEY
@@ -421,11 +397,9 @@
 
     </div>
 
-
     <div class="filters">
 
       <select id="tf">
-
         <option value="all">
           すべて
         </option>
@@ -437,25 +411,19 @@
         <option value="out">
           つかった
         </option>
-
       </select>
 
-
       <select id="af">
-
         <option value="all">
           すべて
         </option>
-
       </select>
 
     </div>
 
-
     <div id="txs"></div>
 
   </section>
-
 
   <!-- =====================================================
        FUTURE
@@ -481,11 +449,9 @@
         使って考えてみよう。
       </p>
 
-
       <div class="form-grid-3">
 
         <label>
-
           いまの年齢
 
           <input
@@ -498,9 +464,7 @@
 
         </label>
 
-
         <label>
-
           1ねんに いれる
 
           <input
@@ -513,9 +477,7 @@
 
         </label>
 
-
         <label>
-
           何年後？
 
           <input
@@ -529,7 +491,6 @@
         </label>
 
       </div>
-
 
       <div class="form-grid-2">
 
@@ -551,7 +512,6 @@
 
         </label>
 
-
         <label>
 
           ふやす
@@ -572,7 +532,6 @@
 
       </div>
 
-
       <button
         id="simulate"
         class="primary wide"
@@ -583,9 +542,7 @@
 
     </div>
 
-
     <div id="result"></div>
-
 
     <div class="card">
 
@@ -619,7 +576,6 @@
 
   </section>
 
-
   <!-- =====================================================
        GOALS
   ====================================================== -->
@@ -632,7 +588,6 @@
     <div class="section-header">
 
       <div>
-
         <small>
           GOAL
         </small>
@@ -640,12 +595,11 @@
         <h2>
           🎯 めあて
         </h2>
-
       </div>
-
 
       <div class="button-group">
 
+        <!-- ★追加：今日のお金へ戻る -->
         <button
           id="goalsBack"
           class="secondary"
@@ -653,7 +607,6 @@
         >
           ← 今日のお金
         </button>
-
 
         <button
           id="addGoal"
@@ -667,11 +620,10 @@
 
     </div>
 
-
-    <div
-      id="goalsList"
-    ></div>
-
+    <!-- ★重要
+         目標だけを描画する専用領域
+         renderGoals() はここだけを書き換える -->
+    <div id="goalsList"></div>
 
     <div class="card">
 
@@ -687,7 +639,6 @@
     </div>
 
   </section>
-
 
   <!-- =====================================================
        LEARN
@@ -707,13 +658,11 @@
         </small>
 
         <h2>
-
           📚
 
           <span id="learnTitle">
             おかねを まなぶ
           </span>
-
         </h2>
 
         <p class="muted">
@@ -722,7 +671,6 @@
         </p>
 
       </div>
-
 
       <button
         id="learnBack"
@@ -733,7 +681,6 @@
       </button>
 
     </div>
-
 
     <div
       id="learnContent"
@@ -752,9 +699,8 @@
 
   </section>
 
-
   <!-- =====================================================
-       EDUCATION / MONEY LAB
+       EDUCATION / おかねラボ
   ====================================================== -->
 
   <section
@@ -781,7 +727,6 @@
 
       </div>
 
-
       <button
         id="educationBack"
         class="secondary hidden"
@@ -791,7 +736,6 @@
       </button>
 
     </div>
-
 
     <div
       id="educationContent"
@@ -812,7 +756,6 @@
   </section>
 
 </main>
-
 
 <!-- =====================================================
      TRANSACTION MODAL
@@ -841,7 +784,6 @@
 
     </div>
 
-
     <form id="txForm">
 
       <input
@@ -849,9 +791,7 @@
         type="hidden"
       >
 
-
       <label>
-
         ひづけ
 
         <input
@@ -859,12 +799,9 @@
           type="date"
           required
         >
-
       </label>
 
-
       <label>
-
         いくら？
 
         <input
@@ -874,12 +811,9 @@
           step="1"
           required
         >
-
       </label>
 
-
       <label>
-
         りゆう / つかいみち
 
         <select id="reason">
@@ -924,18 +858,14 @@
 
       </label>
 
-
       <label>
-
         どこ？
 
         <select id="asset"></select>
 
       </label>
 
-
       <label>
-
         メモ
 
         <textarea
@@ -944,7 +874,6 @@
         ></textarea>
 
       </label>
-
 
       <button
         class="primary wide"
@@ -958,7 +887,6 @@
   </div>
 
 </div>
-
 
 <!-- =====================================================
      CHILD MODAL
@@ -987,23 +915,18 @@
 
     </div>
 
-
     <form id="childForm">
 
       <label>
-
         なまえ
 
         <input
           id="childName"
           required
         >
-
       </label>
 
-
       <label>
-
         うまれた年
 
         <input
@@ -1015,7 +938,6 @@
         >
 
       </label>
-
 
       <button
         class="primary wide"
@@ -1029,7 +951,6 @@
   </div>
 
 </div>
-
 
 <!-- =====================================================
      GOAL MODAL
@@ -1058,23 +979,18 @@
 
     </div>
 
-
     <form id="goalForm">
 
       <label>
-
         なまえ
 
         <input
           id="goalName"
           required
         >
-
       </label>
 
-
       <label>
-
         いくら？
 
         <input
@@ -1083,12 +999,9 @@
           min="1"
           required
         >
-
       </label>
 
-
       <label>
-
         いつまで？
 
         <input
@@ -1096,12 +1009,9 @@
           type="date"
           required
         >
-
       </label>
 
-
       <label>
-
         いま いくら？
 
         <input
@@ -1110,9 +1020,7 @@
           min="0"
           value="0"
         >
-
       </label>
-
 
       <button
         class="primary wide"
@@ -1126,7 +1034,6 @@
   </div>
 
 </div>
-
 
 <!-- =====================================================
      SETTINGS
@@ -1155,11 +1062,9 @@
 
     </div>
 
-
     <p class="muted">
       V2.7 金融教育連携モード
     </p>
-
 
     <button
       id="export"
@@ -1168,7 +1073,6 @@
     >
       ⬇️ データを ほぞん
     </button>
-
 
     <label class="file-button">
 
@@ -1182,7 +1086,6 @@
 
     </label>
 
-
     <button
       id="reset"
       class="danger wide"
@@ -1195,7 +1098,6 @@
 
 </div>
 
-
 <!-- =====================================================
      ERROR
 ====================================================== -->
@@ -1205,22 +1107,12 @@
   class="error-box hidden"
 ></div>
 
-
-<!-- =====================================================
-     FOOTER
-====================================================== -->
-
 <footer>
 
   こどもマネー・ラボ V2.7｜
   金融教育用です。投資成果を保証しません。
 
 </footer>
-
-
-<!-- =====================================================
-     JAVASCRIPT
-====================================================== -->
 
 <script src="./app.js"></script>
 <script src="./learn.js"></script>
