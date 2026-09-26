@@ -2,7 +2,7 @@
 
 /*
 ============================================================
-こどもマネー・ラボ V2.7
+こどもマネー・ラボ V2.8
 教育機能統合モジュール
 
 V2.4 今日の値動き・なぜ？
@@ -12,6 +12,7 @@ V2.5 もしもシミュレーション
      ・インフレ
 V2.6 目標貯金
 V2.7 クイズ・学習履歴
+V2.8 クイズ状態管理安定化
 
 主な改善
 ・JST基準の学習日管理
@@ -27,6 +28,9 @@ V2.7 クイズ・学習履歴
 ・教育画面の直前画面へ戻るナビゲーション
 ・教育画面の履歴管理
 ・現在のクイズ状態をlocalStorageから分離
+・現在表示中のクイズをIDで管理
+・問題ごとの回答状態を完全分離
+・クイズ再描画時の回答状態リセット
 ============================================================
 */
 
@@ -40,13 +44,15 @@ const EDUCATION_STATE_KEY =
 
 
 /*
- * localStorageへ保存するのは、
+ * localStorageへ保存するのは
  * 「学習履歴・累積データ」のみ。
  *
  * 現在表示中のクイズの回答状態は保存しない。
  */
 const DEFAULT_EDUCATION_STATE = {
+
   quizCorrect: 0,
+
   quizAnswered: 0,
 
   learnedGlossary: [],
@@ -58,6 +64,7 @@ const DEFAULT_EDUCATION_STATE = {
   lastStudyDate: null,
 
   studyDays: 0
+
 };
 
 
@@ -67,7 +74,7 @@ let educationState = {
 
 
 /*
- * 現在表示中の教育画面
+ * 現在表示している教育画面
  *
  * home
  * market
@@ -81,19 +88,6 @@ let educationMode = "home";
 
 /*
  * 教育画面の遷移履歴
- *
- * 例：
- *
- * home
- *   ↓
- * goal
- *
- * history:
- * ["home"]
- *
- * 戻る
- *
- * home
  */
 let educationHistory = [];
 
@@ -105,12 +99,31 @@ const EDUCATION_HISTORY_LIMIT = 20;
 
 
 /*
- * 現在表示しているクイズが
- * 回答済みかどうか。
+ * ------------------------------------------------------------
+ * 現在表示中のクイズ状態
+ * ------------------------------------------------------------
  *
- * これは「画面上の一時状態」なので
- * localStorageには保存しない。
+ * これらはlocalStorageへ保存しない。
+ *
+ * currentQuizQuestionId
+ *   現在表示している問題のID
+ *
+ * currentQuizQuestionIndex
+ *   問題配列上のindex
+ *
+ * currentQuizAnswered
+ *   現在の問題を回答済みかどうか
+ *
+ * 重要：
+ * 「クイズを表示しただけ」
+ * と
+ * 「クイズに回答した」
+ * を完全に分離する。
  */
+let currentQuizQuestionId = null;
+
+let currentQuizQuestionIndex = -1;
+
 let currentQuizAnswered = false;
 
 
@@ -126,7 +139,7 @@ function initEducation() {
 
   educationMode = "home";
 
-  currentQuizAnswered = false;
+  resetCurrentQuizState();
 
   renderEducation();
 
@@ -134,10 +147,12 @@ function initEducation() {
 
 
 /* ============================================================
-   State
+   Education State
 ============================================================ */
 
-function normalizeEducationState(parsed) {
+function normalizeEducationState(
+  parsed
+) {
 
   if (
     !parsed ||
@@ -152,8 +167,11 @@ function normalizeEducationState(parsed) {
 
 
   const state = {
+
     ...DEFAULT_EDUCATION_STATE,
+
     ...parsed
+
   };
 
 
@@ -209,9 +227,11 @@ function normalizeEducationState(parsed) {
 
 
   /*
-   * currentQuizAnswered は
-   * 旧バージョンのlocalStorageに残っていても
-   * 使用しない。
+   * currentQuizQuestionId
+   * currentQuizQuestionIndex
+   * currentQuizAnswered
+   *
+   * は保存しない。
    */
 
 
@@ -325,9 +345,30 @@ function clamp(
 ) {
 
   return Math.min(
-    Math.max(value, min),
+    Math.max(
+      value,
+      min
+    ),
     max
   );
+
+}
+
+
+/* ============================================================
+   現在のクイズ状態
+============================================================ */
+
+function resetCurrentQuizState() {
+
+  currentQuizQuestionId =
+    null;
+
+  currentQuizQuestionIndex =
+    -1;
+
+  currentQuizAnswered =
+    false;
 
 }
 
@@ -340,35 +381,26 @@ function clamp(
  * 教育画面を遷移する。
  *
  * 通常の画面遷移では、
- * 「現在画面」を履歴へ積んでから移動する。
- *
- * 例：
- *
- * home → goal
- *
- * history:
- * ["home"]
- *
- * goal → home
- *
- * history:
- * ["home", "goal"]
- *
- * ※ 戻るボタンからの移動では
- * navigateEducationMode()を使用せず、
- * goBackEducation()を使用する。
+ * 現在画面を履歴へ積んでから移動する。
  */
 function navigateEducationMode(
   mode
 ) {
 
   const validModes = [
+
     "home",
+
     "market",
+
     "simulation",
+
     "goal",
+
     "quiz",
+
     "history"
+
   ];
 
 
@@ -378,18 +410,31 @@ function navigateEducationMode(
     )
   ) {
 
-    mode = "home";
+    mode =
+      "home";
 
   }
 
 
   /*
-   * 同じ画面への遷移は
-   * 履歴へ追加しない。
+   * 同じ画面への遷移。
+   *
+   * クイズ画面でも、
+   * 同じ画面を再表示する場合は
+   * クイズ状態をリセットする。
    */
   if (
     mode === educationMode
   ) {
+
+    if (
+      mode === "quiz"
+    ) {
+
+      resetCurrentQuizState();
+
+    }
+
 
     renderEducation();
 
@@ -413,7 +458,7 @@ function navigateEducationMode(
 
 
   /*
-   * 履歴が大きくなりすぎないよう制限。
+   * 履歴上限。
    */
   if (
     educationHistory.length >
@@ -428,20 +473,15 @@ function navigateEducationMode(
   }
 
 
+  /*
+   * 画面遷移時は
+   * クイズ状態を完全に破棄。
+   */
+  resetCurrentQuizState();
+
+
   educationMode =
     mode;
-
-
-  /*
-   * 新しい画面へ移動したら、
-   * クイズの一時状態はリセット。
-   *
-   * 実際のクイズ画面では
-   * renderEducationQuiz()でも
-   * falseへ設定する。
-   */
-  currentQuizAnswered =
-    false;
 
 
   renderEducation();
@@ -451,22 +491,18 @@ function navigateEducationMode(
 
 /*
  * 直前の教育画面へ戻る。
- *
- * 履歴があれば1つ取り出す。
- *
- * 履歴がなければhomeへ戻す。
  */
 function goBackEducation() {
 
   /*
-   * 現在のクイズ状態をリセット。
+   * 戻るときは
+   * クイズ状態を完全に破棄。
    */
-  currentQuizAnswered =
-    false;
+  resetCurrentQuizState();
 
 
   /*
-   * 履歴がある場合
+   * 履歴がある場合。
    */
   if (
     educationHistory.length > 0
@@ -488,9 +524,7 @@ function goBackEducation() {
 
 
   /*
-   * 履歴がない場合。
-   *
-   * home以外ならhomeへ戻す。
+   * 履歴がなければhomeへ。
    */
   if (
     educationMode !== "home"
@@ -502,8 +536,6 @@ function goBackEducation() {
 
     renderEducation();
 
-    return;
-
   }
 
 }
@@ -511,19 +543,6 @@ function goBackEducation() {
 
 /*
  * 教育画面共通の戻るボタン。
- *
- * data-education-modeではなく、
- * data-education-backを使用する。
- *
- * これにより、
- *
- * 「画面へ移動する」
- *
- * と
- *
- * 「直前画面へ戻る」
- *
- * を完全に分離する。
  */
 function renderEducationBackButton() {
 
@@ -572,19 +591,22 @@ function getJapanDateString() {
 
   const year =
     parts.find(
-      part => part.type === "year"
+      part =>
+        part.type === "year"
     )?.value;
 
 
   const month =
     parts.find(
-      part => part.type === "month"
+      part =>
+        part.type === "month"
     )?.value;
 
 
   const day =
     parts.find(
-      part => part.type === "day"
+      part =>
+        part.type === "day"
     )?.value;
 
 
@@ -744,22 +766,27 @@ function educationEscape(
 
 
   return String(value)
+
     .replaceAll(
       "&",
       "&amp;"
     )
+
     .replaceAll(
       "<",
       "&lt;"
     )
+
     .replaceAll(
       ">",
       "&gt;"
     )
+
     .replaceAll(
       '"',
       "&quot;"
     )
+
     .replaceAll(
       "'",
       "&#039;"
@@ -1187,7 +1214,9 @@ function getEducationMarketData() {
     if (
       typeof marketData !==
       "undefined" &&
-      Array.isArray(marketData)
+      Array.isArray(
+        marketData
+      )
     ) {
 
       return marketData;
@@ -1228,7 +1257,6 @@ function getEducationMarketData() {
       return parsed;
 
     }
-
 
   } catch (error) {
 
@@ -1280,7 +1308,9 @@ function renderMarketLearningCard(
 
   const change =
     previous === 0
+
       ? 0
+
       : (
           (
             value -
@@ -1355,7 +1385,7 @@ function openMarketWhy(
 
 
   /*
-   * 詳細画面へ入るので、
+   * 詳細画面へ入るので
    * 現在のmarket画面を履歴へ保存。
    */
   if (
@@ -1380,6 +1410,9 @@ function openMarketWhy(
       );
 
   }
+
+
+  resetCurrentQuizState();
 
 
   markLessonCompleted(
@@ -1900,7 +1933,9 @@ function calculateCrash() {
 
   const required =
     after === 0
+
       ? Infinity
+
       : (
           principal /
           after -
@@ -2287,10 +2322,13 @@ function showEducationError(
     <div class="card">
 
       <p>
+
         ⚠️
+
         ${educationEscape(
           message
         )}
+
       </p>
 
     </div>
@@ -2308,10 +2346,6 @@ function renderEducationGoal(
   target
 ) {
 
-  /*
-   * 戻るボタンは必ず
-   * educationHistoryを使う。
-   */
   target.innerHTML = `
 
     ${renderEducationBackButton()}
@@ -2320,12 +2354,15 @@ function renderEducationGoal(
     <div class="card">
 
       <h2>
+
         🎯
+
         ${
           educationIsKidMode()
             ? "おかねの もくひょう"
             : "お金の目標"
         }
+
       </h2>
 
 
@@ -2424,9 +2461,6 @@ function renderEducationGoal(
     );
 
 
-  /*
-   * 戻るボタンを確実にバインド。
-   */
   bindEducationButtons();
 
 }
@@ -2603,20 +2637,25 @@ function calculateGoal() {
 
         ${
           years > 0
+
             ? `${years}年${remainingMonths}か月`
+
             : `${remainingMonths}か月`
+
         }
 
       </div>
 
 
       <p>
+
         ${
           educationText(
             `毎月${monthly.toLocaleString("ja-JP")}円を積み立てると、約${dateText}に目標へ到達します。`,
             `まいげつ ${monthly.toLocaleString("ja-JP")}えん ためると、${dateText}ごろに もくひょうに たどりつくよ。`
           )
         }
+
       </p>
 
 
@@ -2627,12 +2666,14 @@ function calculateGoal() {
         </strong>
 
         <p>
+
           ${
             educationText(
               `目標までの残り金額は${difference.toLocaleString("ja-JP")}円です。`,
               `あと ${difference.toLocaleString("ja-JP")}えん ためよう。`
             )
           }
+
         </p>
 
       </div>
@@ -2653,174 +2694,12 @@ function calculateGoal() {
    V2.7 Quiz
 ============================================================ */
 
-function renderEducationQuiz(
-  target
-) {
-
-  const questions =
-    getQuizQuestions();
-
-
-  if (!questions.length) {
-
-    target.innerHTML = `
-
-      ${renderEducationBackButton()}
-
-
-      <div class="card">
-
-        ${
-          educationText(
-            "クイズデータがありません。",
-            "クイズが みつからないよ。"
-          )
-        }
-
-      </div>
-
-    `;
-
-
-    bindEducationButtons();
-
-    return;
-
-  }
-
-
-  const index =
-    Math.floor(
-      Math.random() *
-      questions.length
-    );
-
-
-  const question =
-    questions[index];
-
-
-  /*
-   * 新しい問題を表示した瞬間は
-   * 必ず未回答。
-   *
-   * localStorageには保存しない。
-   */
-  currentQuizAnswered =
-    false;
-
-
-  const questionText =
-    educationIsKidMode()
-      ? (
-          question.kidQuestion ||
-          question.question
-        )
-      : question.question;
-
-
-  target.innerHTML = `
-
-    ${renderEducationBackButton()}
-
-
-    <article class="card quiz-card">
-
-      <span class="quiz-number">
-        🧠
-        ${
-          educationIsKidMode()
-            ? "おかねクイズ"
-            : "お金クイズ"
-        }
-      </span>
-
-
-      <h2>
-        ${educationEscape(
-          questionText
-        )}
-      </h2>
-
-
-      <div class="quiz-options">
-
-        ${
-          Array.isArray(
-            question.options
-          )
-            ? question.options
-                .map(
-                  (
-                    option,
-                    i
-                  ) => {
-
-                    const optionText =
-                      educationIsKidMode()
-                        ? (
-                            option.kid ??
-                            option.text ??
-                            option
-                          )
-                        : (
-                            option.text ??
-                            option
-                          );
-
-
-                    return `
-
-                      <button
-                        type="button"
-                        class="quiz-option"
-                        data-quiz-answer="${i}"
-                      >
-
-                        ${educationEscape(
-                          optionText
-                        )}
-
-                      </button>
-
-                    `;
-
-                  }
-                )
-                .join("")
-            : ""
-        }
-
-      </div>
-
-
-      <div
-        id="quizResult"
-      ></div>
-
-    </article>
-
-  `;
-
-
-  target.dataset.quizAnswer =
-    String(
-      normalizeNumber(
-        question.answer,
-        0
-      )
-    );
-
-
-  target.dataset.quizIndex =
-    String(index);
-
-
-  bindEducationButtons();
-
-}
-
-
+/*
+ * クイズデータを取得。
+ *
+ * QUIZ_DATAが存在すればそちらを使用し、
+ * なければ標準問題を使用。
+ */
 function getQuizQuestions() {
 
   try {
@@ -2947,905 +2826,6 @@ function getQuizQuestions() {
 }
 
 
-/*
- * 次のクイズ
- *
- * 現在の回答状態を明示的にリセットしてから
- * 新しい問題を表示する。
- */
-function nextQuiz() {
-
-  currentQuizAnswered =
-    false;
-
-
-  const target =
-    document.getElementById(
-      "educationContent"
-    );
-
-
-  if (!target) {
-    return;
-  }
-
-
-  renderEducationQuiz(
-    target
-  );
-
-}
-
-
-function answerQuiz(
-  answer
-) {
-
-  const target =
-    document.getElementById(
-      "quizResult"
-    );
-
-
-  const content =
-    document.getElementById(
-      "educationContent"
-    );
-
-
-  if (
-    !target ||
-    !content
-  ) {
-
-    return;
-
-  }
-
-
-  /*
-   * 二重回答防止。
-   *
-   * 現在表示中の問題だけを対象とする。
-   */
-  if (
-    currentQuizAnswered
-  ) {
-
-    return;
-
-  }
-
-
-  const questions =
-    getQuizQuestions();
-
-
-  const index =
-    normalizeNumber(
-      content.dataset.quizIndex,
-      -1
-    );
-
-
-  const question =
-    questions[index];
-
-
-  if (!question) {
-    return;
-  }
-
-
-  const correctAnswer =
-    normalizeNumber(
-      question.answer,
-      0
-    );
-
-
-  const userAnswer =
-    normalizeNumber(
-      answer,
-      -1
-    );
-
-
-  const correct =
-    userAnswer ===
-    correctAnswer;
-
-
-  /*
-   * 回答済みにする。
-   *
-   * localStorageには保存しない。
-   */
-  currentQuizAnswered =
-    true;
-
-
-  educationState.quizAnswered =
-    normalizeNumber(
-      educationState.quizAnswered,
-      0
-    ) + 1;
-
-
-  if (correct) {
-
-    educationState.quizCorrect =
-      normalizeNumber(
-        educationState.quizCorrect,
-        0
-      ) + 1;
-
-  }
-
-
-  if (
-    question.id
-  ) {
-
-    markLessonCompleted(
-      `quiz-${question.id}`
-    );
-
-  }
-
-
-  saveEducationState();
-
-
-  const explanation =
-    educationIsKidMode()
-      ? (
-          question.kidExplanation ||
-          question.explanation ||
-          ""
-        )
-      : (
-          question.explanation ||
-          ""
-        );
-
-
-  target.innerHTML = `
-
-    <div class="quiz-result">
-
-      <div class="quiz-result-icon">
-
-        ${
-          correct
-            ? "⭕"
-            : "❌"
-        }
-
-      </div>
-
-
-      <h3>
-
-        ${
-          correct
-            ? (
-                educationIsKidMode()
-                  ? "せいかい！"
-                  : "正解！"
-              )
-            : (
-                educationIsKidMode()
-                  ? "ざんねん！"
-                  : "残念！"
-              )
-        }
-
-      </h3>
-
-
-      <p>
-
-        ${
-          correct
-
-            ? educationText(
-                "正解です。少しずつ金融知識を身につけていきましょう。",
-                "せいかい！すこしずつ おかねの ことを おぼえていこう。"
-              )
-
-            : educationText(
-                "間違っても大丈夫です。解説を読んで覚えましょう。",
-                "まちがえても だいじょうぶ。せつめいを よんで おぼえよう。"
-              )
-
-        }
-
-      </p>
-
-
-      ${
-        explanation
-          ? `
-
-            <div class="learn-example">
-
-              <strong>
-                💡
-                ${
-                  educationIsKidMode()
-                    ? "なぜ？"
-                    : "解説"
-                }
-              </strong>
-
-              <p>
-                ${educationEscape(
-                  explanation
-                )}
-              </p>
-
-            </div>
-
-          `
-          : ""
-      }
-
-
-      <button
-        type="button"
-        class="primary"
-        id="nextQuizButton"
-      >
-
-        ${
-          educationIsKidMode()
-            ? "つぎの クイズ"
-            : "次のクイズ"
-        }
-
-      </button>
-
-    </div>
-
-  `;
-
-
-  document
-    .querySelectorAll(
-      ".quiz-option"
-    )
-    .forEach(
-      button => {
-
-        button.disabled =
-          true;
-
-      }
-    );
-
-
-  /*
-   * 次のクイズボタンは
-   * data-education-modeを使わず
-   * 専用処理にする。
-   */
-  document
-    .getElementById(
-      "nextQuizButton"
-    )
-    ?.addEventListener(
-      "click",
-      nextQuiz
-    );
-
-
-}
-
-
-/* ============================================================
-   学習履歴
-============================================================ */
-
-function renderEducationHistory(
-  target
-) {
-
-  const answered =
-    normalizeNumber(
-      educationState.quizAnswered,
-      0
-    );
-
-
-  const correct =
-    normalizeNumber(
-      educationState.quizCorrect,
-      0
-    );
-
-
-  const rate =
-    answered === 0
-      ? 0
-      : (
-          correct /
-          answered
-        ) * 100;
-
-
-  const scenarios =
-    educationState.viewedScenarios;
-
-
-  const scenarioLabels = {
-
-    compound:
-      educationIsKidMode()
-        ? "ふくり"
-        : "複利",
-
-    crash:
-      educationIsKidMode()
-        ? "ぼうらく"
-        : "暴落",
-
-    inflation:
-      educationIsKidMode()
-        ? "インフレ"
-        : "インフレ"
-
-  };
-
-
-  target.innerHTML = `
-
-    ${renderEducationBackButton()}
-
-
-    <div class="card">
-
-      <h2>
-        📚
-        ${
-          educationIsKidMode()
-            ? "べんきょうきろく"
-            : "学習記録"
-        }
-      </h2>
-
-
-      <div class="education-stat-grid">
-
-        <div>
-
-          <strong>
-            ${educationState.studyDays}
-          </strong>
-
-          <span>
-            ${
-              educationIsKidMode()
-                ? "べんきょうしたひ"
-                : "学習日数"
-            }
-          </span>
-
-        </div>
-
-
-        <div>
-
-          <strong>
-            ${answered}
-          </strong>
-
-          <span>
-            ${
-              educationIsKidMode()
-                ? "クイズ"
-                : "クイズ回答"
-            }
-          </span>
-
-        </div>
-
-
-        <div>
-
-          <strong>
-            ${correct}
-          </strong>
-
-          <span>
-            ${
-              educationIsKidMode()
-                ? "せいかい"
-                : "正解"
-            }
-          </span>
-
-        </div>
-
-
-        <div>
-
-          <strong>
-            ${rate.toFixed(0)}%
-          </strong>
-
-          <span>
-            ${
-              educationIsKidMode()
-                ? "せいかいりつ"
-                : "正解率"
-            }
-          </span>
-
-        </div>
-
-      </div>
-
-    </div>
-
-
-    <div class="card">
-
-      <h3>
-        🧪
-        ${
-          educationIsKidMode()
-            ? "やってみた もしも"
-            : "体験したシミュレーション"
-        }
-      </h3>
-
-
-      ${
-        scenarios.length === 0
-
-          ? `
-
-            <p>
-              ${
-                educationIsKidMode()
-                  ? "まだ やっていないよ。"
-                  : "まだシミュレーションを利用していません。"
-              }
-            </p>
-
-          `
-
-          : `
-
-            <ul>
-
-              ${
-                scenarios
-                  .map(
-                    scenario => `
-                      <li>
-                        ${
-                          educationEscape(
-                            scenarioLabels[
-                              scenario
-                            ] ||
-                            scenario
-                          )
-                        }
-                      </li>
-                    `
-                  )
-                  .join("")
-              }
-
-            </ul>
-
-          `
-      }
-
-    </div>
-
-
-    <div class="card">
-
-      <h3>
-        🌱
-        ${
-          educationIsKidMode()
-            ? "おぼえたこと"
-            : "学習済み"
-        }
-      </h3>
-
-
-      <p>
-        ${
-          educationText(
-            "学習を続けることで、お金の仕組みが少しずつ分かるようになります。",
-            "おかねの ことを すこしずつ おぼえていこう。"
-          )
-        }
-      </p>
-
-
-      <p>
-        ${
-          educationText(
-            `学習済み項目：${educationState.completedLessons.length}`,
-            `おぼえた こと：${educationState.completedLessons.length}`
-          )
-        }
-      </p>
-
-    </div>
-
-  `;
-
-
-  bindEducationButtons();
-
-}
-
-
-/* ============================================================
-   シミュレーション切替
-============================================================ */
-
-function bindSimulationButtons() {
-
-  document
-    .querySelectorAll(
-      "[data-simulation]"
-    )
-    .forEach(
-      button => {
-
-        button.onclick =
-          () => {
-
-            const type =
-              button.dataset.simulation;
-
-
-            document
-              .querySelectorAll(
-                "[data-simulation]"
-              )
-              .forEach(
-                b =>
-                  b.classList.remove(
-                    "active"
-                  )
-              );
-
-
-            button.classList.add(
-              "active"
-            );
-
-
-            if (
-              type === "compound"
-            ) {
-
-              renderCompoundSimulation();
-
-            }
-
-
-            if (
-              type === "crash"
-            ) {
-
-              renderCrashSimulation();
-
-            }
-
-
-            if (
-              type === "inflation"
-            ) {
-
-              renderInflationSimulation();
-
-            }
-
-          };
-
-      }
-    );
-
-}
-
-
-/* ============================================================
-   Button
-============================================================ */
-
-function bindEducationButtons() {
-
-  /*
-   * ========================================================
-   * 教育モードへの遷移
-   * ========================================================
-   *
-   * data-education-mode は
-   * 「その画面へ移動する」ためにのみ使用する。
-   *
-   * 戻るボタンでは使用しない。
-   */
-  document
-    .querySelectorAll(
-      "[data-education-mode]"
-    )
-    .forEach(
-      button => {
-
-        /*
-         * 既存イベントが残っていた場合に備える。
-         */
-        button.onclick = null;
-
-
-        button.addEventListener(
-          "click",
-          event => {
-
-            event.preventDefault();
-            event.stopPropagation();
-
-
-            const mode =
-              button.dataset.educationMode;
-
-
-            navigateEducationMode(
-              mode
-            );
-
-          }
-        );
-
-      }
-    );
-
-
-  /*
-   * ========================================================
-   * 戻るボタン
-   * ========================================================
-   *
-   * data-education-back は
-   * 必ずgoBackEducation()へ送る。
-   */
-  document
-    .querySelectorAll(
-      "[data-education-back]"
-    )
-    .forEach(
-      button => {
-
-        /*
-         * onclick方式との二重実行を防止。
-         */
-        button.onclick = null;
-
-
-        button.addEventListener(
-          "click",
-          event => {
-
-            event.preventDefault();
-            event.stopPropagation();
-
-
-            goBackEducation();
-
-          }
-        );
-
-      }
-    );
-
-
-  /*
-   * ========================================================
-   * Market「なぜ？」
-   * ========================================================
-   */
-  document
-    .querySelectorAll(
-      "[data-market-why]"
-    )
-    .forEach(
-      button => {
-
-        button.addEventListener(
-          "click",
-          event => {
-
-            event.preventDefault();
-            event.stopPropagation();
-
-
-            openMarketWhy(
-              button.dataset.marketWhy
-            );
-
-          }
-        );
-
-      }
-    );
-
-
-  /*
-   * ========================================================
-   * Quiz
-   * ========================================================
-   */
-  document
-    .querySelectorAll(
-      "[data-quiz-answer]"
-    )
-    .forEach(
-      button => {
-
-        button.addEventListener(
-          "click",
-          event => {
-
-            event.preventDefault();
-            event.stopPropagation();
-
-
-            answerQuiz(
-              button.dataset.quizAnswer
-            );
-
-          }
-        );
-
-      }
-    );
-
-
-  /*
-   * ========================================================
-   * Simulation
-   * ========================================================
-   */
-  bindSimulationButtons();
-
-}
-
-
-/* ============================================================
-   ひらがなモード変更時
-============================================================ */
-
-function refreshEducationForModeChange() {
-
-  const target =
-    document.getElementById(
-      "educationContent"
-    );
-
-
-  if (!target) {
-    return;
-  }
-
-
-  /*
-   * モード変更時は
-   * クイズの一時状態をリセット。
-   */
-  currentQuizAnswered =
-    false;
-
-
-  renderEducation();
-
-}
-
-
-/* ============================================================
-   外部から教育画面を開くためのAPI
-============================================================ */
-
-function openEducationMode(
-  mode
-) {
-
-  const validModes = [
-    "home",
-    "market",
-    "simulation",
-    "goal",
-    "quiz",
-    "history"
-  ];
-
-
-  if (
-    !validModes.includes(
-      mode
-    )
-  ) {
-
-    mode = "home";
-
-  }
-
-
-  /*
-   * 外部から教育画面を開く場合は
-   * 既存の教育画面履歴をリセット。
-   */
-  educationHistory = [];
-
-
-  /*
-   * 新しく教育画面を開くので
-   * クイズの一時状態もリセット。
-   */
-  currentQuizAnswered =
-    false;
-
-
-  educationMode =
-    mode;
-
-
-  renderEducation();
-
-}
-
-
-/* ============================================================
-   起動
-============================================================ */
-
-document.addEventListener(
-  "DOMContentLoaded",
-  () => {
-
-    initEducation();
-
-  }
-);
-
-/* ============================================================
-   V2.7.1 QUIZ FIX
-   ------------------------------------------------------------
-   ・2問目以降が回答済みになる問題を修正
-   ・現在表示中の問題をIDで保持
-   ・問題ごとの回答状態を完全に分離
-   ・次のクイズでは必ず未回答状態から開始
-============================================================ */
-
-let currentQuizQuestionId = null;
-let currentQuizQuestionIndex = -1;
-let currentQuizAnsweredFixed = false;
-
-
-/* ============================================================
-   現在のクイズ状態をリセット
-============================================================ */
-
-function resetCurrentQuizState() {
-
-  currentQuizQuestionId = null;
-
-  currentQuizQuestionIndex = -1;
-
-  currentQuizAnsweredFixed = false;
-
-}
-
-
 /* ============================================================
    クイズ描画
 ============================================================ */
@@ -3853,6 +2833,13 @@ function resetCurrentQuizState() {
 function renderEducationQuiz(
   target
 ) {
+
+  /*
+   * 新しい問題を表示する前に、
+   * 必ず現在の回答状態をリセット。
+   */
+  resetCurrentQuizState();
+
 
   const questions =
     getQuizQuestions();
@@ -3863,22 +2850,22 @@ function renderEducationQuiz(
     questions.length === 0
   ) {
 
-    resetCurrentQuizState();
-
-
     target.innerHTML = `
 
       ${renderEducationBackButton()}
 
+
       <div class="card">
 
         <p>
+
           ${
             educationText(
               "クイズデータがありません。",
               "クイズが みつからないよ。"
             )
           }
+
         </p>
 
       </div>
@@ -3894,22 +2881,20 @@ function renderEducationQuiz(
 
 
   /*
-   * 新しい問題を選択
+   * 問題をランダム選択。
    *
-   * 前の問題の状態は完全に破棄する。
+   * 問題数が2問以上の場合は、
+   * 直前と同じ問題をなるべく避ける。
+   *
+   * ただし「直前の問題」を
+   * 回答状態として再利用することはない。
    */
-
   let index =
     Math.floor(
       Math.random() *
       questions.length
     );
 
-
-  /*
-   * 直前と同じ問題が続く場合は、
-   * 問題数が2問以上なら別問題を優先。
-   */
 
   if (
     questions.length > 1 &&
@@ -3939,11 +2924,13 @@ function renderEducationQuiz(
 
 
   /*
-   * 現在の問題を明示的に記録
+   * 現在問題を確定。
+   *
+   * IDを最優先。
    */
-
   currentQuizQuestionIndex =
     index;
+
 
   currentQuizQuestionId =
     String(
@@ -3953,28 +2940,21 @@ function renderEducationQuiz(
 
 
   /*
-   * 新しい問題なので必ず未回答
+   * 新しい問題なので未回答。
    */
-
-  currentQuizAnsweredFixed =
-    false;
-
-
-  /*
-   * 旧方式の状態も念のためリセット
-   */
-
   currentQuizAnswered =
     false;
 
 
   const questionText =
     educationIsKidMode()
+
       ? (
           question.kidQuestion ||
           question.question ||
           ""
         )
+
       : (
           question.question ||
           ""
@@ -4084,9 +3064,15 @@ function renderEducationQuiz(
 
 
   /*
-   * 旧datasetも残す。
+   * ----------------------------------------------------------
+   * 互換性用dataset
+   * ----------------------------------------------------------
    *
-   * 既存コードとの互換性維持。
+   * 旧コードや他の処理が参照しても
+   * 問題が起きないように残す。
+   *
+   * ただし回答判定では
+   * quizQuestionIdを優先する。
    */
 
   target.dataset.quizIndex =
@@ -4106,6 +3092,9 @@ function renderEducationQuiz(
     currentQuizQuestionId;
 
 
+  /*
+   * ここでイベントを設定。
+   */
   bindEducationButtons();
 
 }
@@ -4118,9 +3107,8 @@ function renderEducationQuiz(
 function nextQuiz() {
 
   /*
-   * 現在の問題を完全に終了
+   * 現在の問題の状態を完全破棄。
    */
-
   resetCurrentQuizState();
 
 
@@ -4136,9 +3124,11 @@ function nextQuiz() {
 
 
   /*
-   * 新しい問題を描画
+   * 新しい問題を描画。
+   *
+   * renderEducationQuiz()内でも
+   * 再度resetされる。
    */
-
   renderEducationQuiz(
     target
   );
@@ -4154,7 +3144,7 @@ function answerQuiz(
   answer
 ) {
 
-  const target =
+  const resultTarget =
     document.getElementById(
       "quizResult"
     );
@@ -4167,7 +3157,7 @@ function answerQuiz(
 
 
   if (
-    !target ||
+    !resultTarget ||
     !content
   ) {
 
@@ -4177,11 +3167,14 @@ function answerQuiz(
 
 
   /*
-   * 現在の問題についてのみ二重回答を防止
+   * ----------------------------------------------------------
+   * 二重回答防止
+   * ----------------------------------------------------------
+   *
+   * 「現在表示中の1問」にだけ適用。
    */
-
   if (
-    currentQuizAnsweredFixed
+    currentQuizAnswered
   ) {
 
     return;
@@ -4204,7 +3197,22 @@ function answerQuiz(
 
 
   /*
-   * 現在表示中の問題をIDから取得
+   * ----------------------------------------------------------
+   * 現在問題の特定
+   * ----------------------------------------------------------
+   *
+   * 最優先：
+   *   educationContent.dataset.quizQuestionId
+   *
+   * 次：
+   *   currentQuizQuestionId
+   *
+   * 最後：
+   *   quizIndex
+   *
+   * これにより、
+   * 問題2へ進んだ際に
+   * 問題1の回答情報を再利用することを防ぐ。
    */
 
   const questionId =
@@ -4227,10 +3235,9 @@ function answerQuiz(
 
 
   /*
-   * IDがない古い問題データへの
-   * フォールバック
+   * IDを持たない旧データへの
+   * フォールバック。
    */
-
   if (!question) {
 
     const index =
@@ -4259,16 +3266,10 @@ function answerQuiz(
 
 
   /*
-   * 回答済み状態をこの問題だけに設定
+   * ----------------------------------------------------------
+   * 回答判定
+   * ----------------------------------------------------------
    */
-
-  currentQuizAnsweredFixed =
-    true;
-
-
-  currentQuizAnswered =
-    true;
-
 
   const correctAnswer =
     normalizeNumber(
@@ -4290,7 +3291,21 @@ function answerQuiz(
 
 
   /*
-   * 回答履歴
+   * ----------------------------------------------------------
+   * ここで初めて回答済みにする
+   * ----------------------------------------------------------
+   *
+   * 問題表示時にはfalse。
+   * ボタンを押したときだけtrue。
+   */
+  currentQuizAnswered =
+    true;
+
+
+  /*
+   * ----------------------------------------------------------
+   * 学習履歴更新
+   * ----------------------------------------------------------
    */
 
   educationState.quizAnswered =
@@ -4325,6 +3340,12 @@ function answerQuiz(
   saveEducationState();
 
 
+  /*
+   * ----------------------------------------------------------
+   * 解説
+   * ----------------------------------------------------------
+   */
+
   const explanation =
     educationIsKidMode()
 
@@ -4340,7 +3361,13 @@ function answerQuiz(
         );
 
 
-  target.innerHTML = `
+  /*
+   * ----------------------------------------------------------
+   * 結果表示
+   * ----------------------------------------------------------
+   */
+
+  resultTarget.innerHTML = `
 
     <div class="quiz-result">
 
@@ -4448,16 +3475,14 @@ function answerQuiz(
 
       </button>
 
-
     </div>
 
   `;
 
 
   /*
-   * 回答ボタンを無効化
+   * 回答ボタンを無効化。
    */
-
   document
     .querySelectorAll(
       ".quiz-option"
@@ -4473,16 +3498,22 @@ function answerQuiz(
 
 
   /*
-   * 次のクイズ
+   * 次のクイズ。
+   *
+   * onclickではなく
+   * addEventListenerを1回だけ設定。
    */
-
   document
     .getElementById(
       "nextQuizButton"
     )
     ?.addEventListener(
       "click",
-      () => {
+      event => {
+
+        event.preventDefault();
+
+        event.stopPropagation();
 
         nextQuiz();
 
@@ -4493,78 +3524,557 @@ function answerQuiz(
 
 
 /* ============================================================
-   教育モード遷移時のクイズ状態リセット
+   学習履歴
 ============================================================ */
 
-function navigateEducationMode(
-  mode
+function renderEducationHistory(
+  target
 ) {
 
-  resetCurrentQuizState();
-
-
-  const validModes = [
-
-    "home",
-    "market",
-    "simulation",
-    "goal",
-    "quiz",
-    "history"
-
-  ];
-
-
-  if (
-    !validModes.includes(
-      mode
-    )
-  ) {
-
-    mode =
-      "home";
-
-  }
-
-
-  if (
-    mode ===
-    educationMode
-  ) {
-
-    renderEducation();
-
-    return;
-
-  }
-
-
-  if (
-    educationMode
-  ) {
-
-    educationHistory.push(
-      educationMode
+  const answered =
+    normalizeNumber(
+      educationState.quizAnswered,
+      0
     );
 
+
+  const correct =
+    normalizeNumber(
+      educationState.quizCorrect,
+      0
+    );
+
+
+  const rate =
+    answered === 0
+
+      ? 0
+
+      : (
+          correct /
+          answered
+        ) * 100;
+
+
+  const scenarios =
+    Array.isArray(
+      educationState.viewedScenarios
+    )
+      ? educationState.viewedScenarios
+      : [];
+
+
+  const scenarioLabels = {
+
+    compound:
+      educationIsKidMode()
+        ? "ふくり"
+        : "複利",
+
+    crash:
+      educationIsKidMode()
+        ? "ぼうらく"
+        : "暴落",
+
+    inflation:
+      educationIsKidMode()
+        ? "インフレ"
+        : "インフレ"
+
+  };
+
+
+  target.innerHTML = `
+
+    ${renderEducationBackButton()}
+
+
+    <div class="card">
+
+      <h2>
+
+        📚
+
+        ${
+          educationIsKidMode()
+            ? "べんきょうきろく"
+            : "学習記録"
+        }
+
+      </h2>
+
+
+      <div class="education-stat-grid">
+
+        <div>
+
+          <strong>
+            ${educationState.studyDays}
+          </strong>
+
+          <span>
+            ${
+              educationIsKidMode()
+                ? "べんきょうしたひ"
+                : "学習日数"
+            }
+          </span>
+
+        </div>
+
+
+        <div>
+
+          <strong>
+            ${answered}
+          </strong>
+
+          <span>
+            ${
+              educationIsKidMode()
+                ? "クイズ"
+                : "クイズ回答"
+            }
+          </span>
+
+        </div>
+
+
+        <div>
+
+          <strong>
+            ${correct}
+          </strong>
+
+          <span>
+            ${
+              educationIsKidMode()
+                ? "せいかい"
+                : "正解"
+            }
+          </span>
+
+        </div>
+
+
+        <div>
+
+          <strong>
+            ${rate.toFixed(0)}%
+          </strong>
+
+          <span>
+            ${
+              educationIsKidMode()
+                ? "せいかいりつ"
+                : "正解率"
+            }
+          </span>
+
+        </div>
+
+      </div>
+
+    </div>
+
+
+    <div class="card">
+
+      <h3>
+
+        🧪
+
+        ${
+          educationIsKidMode()
+            ? "やってみた もしも"
+            : "体験したシミュレーション"
+        }
+
+      </h3>
+
+
+      ${
+        scenarios.length === 0
+
+          ? `
+
+            <p>
+
+              ${
+                educationIsKidMode()
+                  ? "まだ やっていないよ。"
+                  : "まだシミュレーションを利用していません。"
+              }
+
+            </p>
+
+          `
+
+          : `
+
+            <ul>
+
+              ${
+                scenarios
+                  .map(
+                    scenario => `
+
+                      <li>
+
+                        ${
+                          educationEscape(
+                            scenarioLabels[
+                              scenario
+                            ] ||
+                            scenario
+                          )
+                        }
+
+                      </li>
+
+                    `
+                  )
+                  .join("")
+              }
+
+            </ul>
+
+          `
+      }
+
+    </div>
+
+
+    <div class="card">
+
+      <h3>
+
+        🌱
+
+        ${
+          educationIsKidMode()
+            ? "おぼえたこと"
+            : "学習済み"
+        }
+
+      </h3>
+
+
+      <p>
+
+        ${
+          educationText(
+            "学習を続けることで、お金の仕組みが少しずつ分かるようになります。",
+            "おかねの ことを すこしずつ おぼえていこう。"
+          )
+        }
+
+      </p>
+
+
+      <p>
+
+        ${
+          educationText(
+            `学習済み項目：${educationState.completedLessons.length}`,
+            `おぼえた こと：${educationState.completedLessons.length}`
+          )
+        }
+
+      </p>
+
+    </div>
+
+  `;
+
+
+  bindEducationButtons();
+
+}
+
+
+/* ============================================================
+   シミュレーション切替
+============================================================ */
+
+function bindSimulationButtons() {
+
+  document
+    .querySelectorAll(
+      "[data-simulation]"
+    )
+    .forEach(
+      button => {
+
+        /*
+         * 再描画時の重複イベント防止。
+         */
+        button.onclick = null;
+
+
+        button.onclick =
+          event => {
+
+            event.preventDefault();
+
+            event.stopPropagation();
+
+
+            const type =
+              button.dataset.simulation;
+
+
+            document
+              .querySelectorAll(
+                "[data-simulation]"
+              )
+              .forEach(
+                b =>
+                  b.classList.remove(
+                    "active"
+                  )
+              );
+
+
+            button.classList.add(
+              "active"
+            );
+
+
+            if (
+              type === "compound"
+            ) {
+
+              renderCompoundSimulation();
+
+            }
+
+
+            if (
+              type === "crash"
+            ) {
+
+              renderCrashSimulation();
+
+            }
+
+
+            if (
+              type === "inflation"
+            ) {
+
+              renderInflationSimulation();
+
+            }
+
+          };
+
+      }
+    );
+
+}
+
+
+/* ============================================================
+   Button
+============================================================ */
+
+function bindEducationButtons() {
+
+  /*
+   * ========================================================
+   * 教育モードへの遷移
+   * ========================================================
+   */
+
+  document
+    .querySelectorAll(
+      "[data-education-mode]"
+    )
+    .forEach(
+      button => {
+
+        /*
+         * addEventListenerではなく
+         * onclickへ統一。
+         *
+         * 再描画によるイベント重複を防止。
+         */
+        button.onclick =
+          event => {
+
+            event.preventDefault();
+
+            event.stopPropagation();
+
+
+            const mode =
+              button.dataset.educationMode;
+
+
+            navigateEducationMode(
+              mode
+            );
+
+          };
+
+      }
+    );
+
+
+  /*
+   * ========================================================
+   * 戻るボタン
+   * ========================================================
+   */
+
+  document
+    .querySelectorAll(
+      "[data-education-back]"
+    )
+    .forEach(
+      button => {
+
+        button.onclick =
+          event => {
+
+            event.preventDefault();
+
+            event.stopPropagation();
+
+
+            goBackEducation();
+
+          };
+
+      }
+    );
+
+
+  /*
+   * ========================================================
+   * Market「なぜ？」
+   * ========================================================
+   */
+
+  document
+    .querySelectorAll(
+      "[data-market-why]"
+    )
+    .forEach(
+      button => {
+
+        button.onclick =
+          event => {
+
+            event.preventDefault();
+
+            event.stopPropagation();
+
+
+            openMarketWhy(
+              button.dataset.marketWhy
+            );
+
+          };
+
+      }
+    );
+
+
+  /*
+   * ========================================================
+   * Quiz
+   * ========================================================
+   *
+   * 現在表示中の問題のボタンだけに
+   * イベントを設定。
+   *
+   * onclick方式なので、
+   * 再描画によるイベント多重登録を防止。
+   */
+
+  document
+    .querySelectorAll(
+      "[data-quiz-answer]"
+    )
+    .forEach(
+      button => {
+
+        button.onclick =
+          event => {
+
+            event.preventDefault();
+
+            event.stopPropagation();
+
+
+            /*
+             * 問題IDが一致しない古いボタンからの
+             * 回答を念のため拒否。
+             */
+            const buttonQuestionId =
+              button.dataset.quizQuestionId;
+
+
+            if (
+              currentQuizQuestionId !== null &&
+              buttonQuestionId &&
+              String(
+                buttonQuestionId
+              ) !== String(
+                currentQuizQuestionId
+              )
+            ) {
+
+              return;
+
+            }
+
+
+            answerQuiz(
+              button.dataset.quizAnswer
+            );
+
+          };
+
+      }
+    );
+
+
+  /*
+   * ========================================================
+   * Simulation
+   * ========================================================
+   */
+
+  bindSimulationButtons();
+
+}
+
+
+/* ============================================================
+   ひらがなモード変更時
+============================================================ */
+
+function refreshEducationForModeChange() {
+
+  const target =
+    document.getElementById(
+      "educationContent"
+    );
+
+
+  if (!target) {
+    return;
   }
 
 
-  if (
-    educationHistory.length >
-    EDUCATION_HISTORY_LIMIT
-  ) {
-
-    educationHistory =
-      educationHistory.slice(
-        -EDUCATION_HISTORY_LIMIT
-      );
-
-  }
-
-
-  educationMode =
-    mode;
+  /*
+   * モード変更時は
+   * クイズ状態を完全リセット。
+   */
+  resetCurrentQuizState();
 
 
   renderEducation();
@@ -4573,68 +4083,25 @@ function navigateEducationMode(
 
 
 /* ============================================================
-   戻る
-============================================================ */
-
-function goBackEducation() {
-
-  resetCurrentQuizState();
-
-
-  if (
-    educationHistory.length >
-    0
-  ) {
-
-    const previousMode =
-      educationHistory.pop();
-
-
-    educationMode =
-      previousMode;
-
-
-    renderEducation();
-
-    return;
-
-  }
-
-
-  if (
-    educationMode !==
-    "home"
-  ) {
-
-    educationMode =
-      "home";
-
-
-    renderEducation();
-
-  }
-
-}
-
-
-/* ============================================================
-   外部から開く場合
+   外部から教育画面を開くためのAPI
 ============================================================ */
 
 function openEducationMode(
   mode
 ) {
 
-  resetCurrentQuizState();
-
-
   const validModes = [
 
     "home",
+
     "market",
+
     "simulation",
+
     "goal",
+
     "quiz",
+
     "history"
 
   ];
@@ -4652,8 +4119,17 @@ function openEducationMode(
   }
 
 
-  educationHistory =
-    [];
+  /*
+   * 外部から教育画面を開く場合は
+   * 既存履歴をリセット。
+   */
+  educationHistory = [];
+
+
+  /*
+   * クイズ状態も完全リセット。
+   */
+  resetCurrentQuizState();
 
 
   educationMode =
@@ -4663,3 +4139,17 @@ function openEducationMode(
   renderEducation();
 
 }
+
+
+/* ============================================================
+   起動
+============================================================ */
+
+document.addEventListener(
+  "DOMContentLoaded",
+  () => {
+
+    initEducation();
+
+  }
+);
