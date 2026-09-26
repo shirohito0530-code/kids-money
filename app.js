@@ -2,18 +2,23 @@
 
 /*
 ============================================================
-こどもマネー・ラボ V2.7
+こどもマネー・ラボ V2.8
 ============================================================
 
 今回の修正
 
-・「めあて」画面の描画先を #goals から #goalsList に変更
-・「← 今日のお金」ボタンを追加
-・目標画面からホームへ確実に戻れるよう修正
-・data-tab を使った動的リンクにも対応
-・おかねラボ / まなぶ内で生成された
-  「今日のお金」等のリンクもイベント委譲で処理
-・switchTab() を共通ナビゲーションとして利用
+・「めあて」画面の描画先を #goalsList に統一
+・「← 今日のお金」ボタンに対応
+・data-tab を使った動的リンクに対応
+・子どもの追加・編集・削除を一本化
+・子ども管理ボタンを data-child-edit / data-child-delete に統一
+・子ども1人だけの場合は削除不可
+・入金/出金履歴の追加・編集・削除を一本化
+・取引編集時に元のID / createdAtを維持
+・投資取引編集時に取引時点指数を再計算
+・出金編集時は編集前取引を除外して残高チェック
+・動的ボタンはイベント委譲で処理
+・旧V2.7.1の重複実装を削除
 ・既存データ形式は維持
 ============================================================
 */
@@ -26,7 +31,7 @@
 const STORAGE_KEY = "kidsMoneyLabV22";
 const MARKET_KEY = "kidsMoneyMarketV22";
 
-const APP_VERSION = 22;
+const APP_VERSION = 23;
 
 const MARKET_DATA_URL = "./data/market.json";
 
@@ -91,6 +96,18 @@ let kidMode =
   localStorage.getItem("kidsMoneyKidMode") === "1";
 
 
+/*
+ * 編集中のID
+ *
+ * null  = 新規追加
+ * ID    = 編集
+ */
+
+let editingChildId = null;
+
+let editingTransactionId = null;
+
+
 /* ============================================================
    DOM
 ============================================================ */
@@ -118,6 +135,7 @@ function createId() {
     "-" +
     Math.random().toString(36).slice(2)
   );
+
 }
 
 
@@ -133,6 +151,7 @@ function yen(value) {
     "¥" +
     Math.round(n).toLocaleString("ja-JP")
   );
+
 }
 
 
@@ -145,6 +164,7 @@ function signedYen(value) {
   }
 
   return "-" + yen(Math.abs(n));
+
 }
 
 
@@ -157,6 +177,7 @@ function percent(value) {
     n.toFixed(2) +
     "%"
   );
+
 }
 
 
@@ -168,6 +189,7 @@ function escapeHtml(value) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+
 }
 
 
@@ -186,6 +208,7 @@ function today() {
     );
 
   return local.toISOString().slice(0, 10);
+
 }
 
 
@@ -198,8 +221,11 @@ function showError(message) {
   const box = $("errorBox");
 
   if (!box) {
+
     console.error(message);
+
     return;
+
   }
 
   box.textContent = message;
@@ -210,10 +236,13 @@ function showError(message) {
 
   showError.timer =
     setTimeout(() => {
+
       box.classList.add("hidden");
+
     }, 5000);
 
   console.error(message);
+
 }
 
 
@@ -256,7 +285,9 @@ function loadState() {
       localStorage.getItem(STORAGE_KEY);
 
     if (!raw) {
+
       return createDefaultState();
+
     }
 
     const parsed =
@@ -266,8 +297,40 @@ function loadState() {
       !parsed ||
       !Array.isArray(parsed.children)
     ) {
+
       return createDefaultState();
+
     }
+
+    /*
+     * 旧データとの互換性維持
+     */
+
+    parsed.version =
+      APP_VERSION;
+
+    parsed.children =
+      parsed.children.map(
+        child => ({
+
+          ...child,
+
+          transactions:
+            Array.isArray(
+              child.transactions
+            )
+              ? child.transactions
+              : [],
+
+          goals:
+            Array.isArray(
+              child.goals
+            )
+              ? child.goals
+              : []
+
+        })
+      );
 
     return parsed;
 
@@ -334,7 +397,9 @@ function loadMarket() {
       localStorage.getItem(MARKET_KEY);
 
     if (!raw) {
+
       return emptyMarketState();
+
     }
 
     const parsed =
@@ -344,7 +409,9 @@ function loadMarket() {
       !parsed ||
       typeof parsed !== "object"
     ) {
+
       return emptyMarketState();
+
     }
 
     return parsed;
@@ -387,17 +454,43 @@ function getCurrentChild() {
     !Array.isArray(state.children) ||
     !state.children.length
   ) {
+
     return null;
+
+  }
+
+  const selected =
+    state.children.find(
+      child =>
+        child.id ===
+        selectedChildId
+    );
+
+  return (
+    selected ||
+    state.children[0]
+  );
+
+}
+
+
+function getChildById(childId) {
+
+  if (
+    !state ||
+    !Array.isArray(state.children)
+  ) {
+
+    return null;
+
   }
 
   return (
-
     state.children.find(
-      child => child.id === selectedChildId
+      child =>
+        child.id === childId
     ) ||
-
-    state.children[0]
-
+    null
   );
 
 }
@@ -416,7 +509,9 @@ function getMarket(assetKey) {
     !asset ||
     asset.type !== "index"
   ) {
+
     return null;
+
   }
 
   return (
@@ -438,7 +533,9 @@ function getLatestIndexValue(assetKey) {
     !Array.isArray(market.series) ||
     !market.series.length
   ) {
+
     return null;
+
   }
 
   const latest =
@@ -469,7 +566,9 @@ function getIndexValue(
     !Array.isArray(market.series) ||
     !market.series.length
   ) {
+
     return null;
+
   }
 
   let result = null;
@@ -487,7 +586,9 @@ function getIndexValue(
         Number(item.value);
 
       if (value > 0) {
+
         result = value;
+
       }
 
     } else {
@@ -513,16 +614,23 @@ function getIndexReturn(
 ) {
 
   const current =
-    getLatestIndexValue(assetKey);
+    getLatestIndexValue(
+      assetKey
+    );
 
   const historical =
-    getIndexValue(assetKey, date);
+    getIndexValue(
+      assetKey,
+      date
+    );
 
   if (
     !current ||
     !historical
   ) {
+
     return null;
+
   }
 
   return (
@@ -560,12 +668,16 @@ function calculateInvestment(
 
 
   if (!child) {
+
     return result;
+
   }
 
 
   const transactions =
-    Array.isArray(child.transactions)
+    Array.isArray(
+      child.transactions
+    )
       ? [...child.transactions]
       : [];
 
@@ -574,7 +686,9 @@ function calculateInvestment(
     transactions
 
       .filter(
-        tx => tx.asset === assetKey
+        tx =>
+          tx.asset ===
+          assetKey
       )
 
       .sort(
@@ -593,7 +707,9 @@ function calculateInvestment(
       Number(tx.amount) || 0;
 
     if (amount <= 0) {
+
       continue;
+
     }
 
 
@@ -609,16 +725,20 @@ function calculateInvestment(
       index <= 0
     ) {
 
-      if (tx.type === "in") {
+      if (
+        tx.type === "in"
+      ) {
 
-        result.principal += amount;
+        result.principal +=
+          amount;
 
       } else {
 
         result.principal =
           Math.max(
             0,
-            result.principal - amount
+            result.principal -
+            amount
           );
 
       }
@@ -628,7 +748,9 @@ function calculateInvestment(
     }
 
 
-    if (tx.type === "out") {
+    if (
+      tx.type === "out"
+    ) {
 
       const sellUnits =
         amount / index;
@@ -636,13 +758,15 @@ function calculateInvestment(
       result.units =
         Math.max(
           0,
-          result.units - sellUnits
+          result.units -
+          sellUnits
         );
 
       result.principal =
         Math.max(
           0,
-          result.principal - amount
+          result.principal -
+          amount
         );
 
     } else {
@@ -677,7 +801,8 @@ function calculateInvestment(
   ) {
 
     result.value =
-      result.units * latest;
+      result.units *
+      latest;
 
   } else {
 
@@ -710,7 +835,9 @@ function calculateCash(child) {
   let balance = 0;
 
   if (!child) {
+
     return 0;
+
   }
 
 
@@ -724,7 +851,9 @@ function calculateCash(child) {
     if (
       tx.asset !== "cash"
     ) {
+
       continue;
+
     }
 
 
@@ -735,7 +864,8 @@ function calculateCash(child) {
       balance =
         Math.max(
           0,
-          balance - amount
+          balance -
+          amount
         );
 
     } else {
@@ -786,6 +916,7 @@ function calculateChild(child) {
 
 
   let totalIn = 0;
+
   let totalOut = 0;
 
 
@@ -795,6 +926,7 @@ function calculateChild(child) {
 
     const amount =
       Number(tx.amount) || 0;
+
 
     if (
       tx.type === "out"
@@ -814,7 +946,9 @@ function calculateChild(child) {
 
 
   const cash =
-    calculateCash(child);
+    calculateCash(
+      child
+    );
 
 
   const world =
@@ -857,11 +991,14 @@ function calculateChild(child) {
 
     balances: {
       cash,
-      world: world.value,
-      sp: sp.value
+      world:
+        world.value,
+      sp:
+        sp.value
     },
 
     totalIn,
+
     totalOut,
 
     principal,
@@ -899,9 +1036,27 @@ function renderChildSelector() {
     $("child");
 
   if (!select) {
+
     return;
+
   }
 
+
+  if (
+    !state ||
+    !Array.isArray(
+      state.children
+    )
+  ) {
+
+    return;
+
+  }
+
+
+  /*
+   * 選択肢を作り直す
+   */
 
   select.innerHTML = "";
 
@@ -928,6 +1083,11 @@ function renderChildSelector() {
   }
 
 
+  /*
+   * 現在選択中の子どもが
+   * 存在しない場合は先頭を選択
+   */
+
   if (
     !state.children.some(
       child =>
@@ -944,7 +1104,98 @@ function renderChildSelector() {
 
 
   select.value =
+    selectedChildId ||
+    "";
+
+
+  /*
+   * 子ども管理ボタン
+   *
+   * 旧実装の
+   * #editChild / #deleteChild
+   * は使用しない。
+   *
+   * data属性で統一する。
+   */
+
+  const parent =
+    select.parentElement;
+
+  if (!parent) {
+
+    return;
+
+  }
+
+
+  /*
+   * 既存の管理ボタンを削除。
+   *
+   * renderChildSelector() が何度呼ばれても
+   * 重複しない。
+   */
+
+  parent
+    .querySelectorAll(
+      "[data-child-edit], [data-child-delete]"
+    )
+    .forEach(
+      button => {
+        button.remove();
+      }
+    );
+
+
+  /*
+   * 編集
+   */
+
+  const editButton =
+    document.createElement(
+      "button"
+    );
+
+  editButton.type =
+    "button";
+
+  editButton.className =
+    "secondary";
+
+  editButton.dataset.childEdit =
     selectedChildId || "";
+
+  editButton.textContent =
+    "✏️ 編集";
+
+  parent.appendChild(
+    editButton
+  );
+
+
+  /*
+   * 削除
+   */
+
+  const deleteButton =
+    document.createElement(
+      "button"
+    );
+
+  deleteButton.type =
+    "button";
+
+  deleteButton.className =
+    "secondary";
+
+  deleteButton.dataset.childDelete =
+    selectedChildId || "";
+
+  deleteButton.textContent =
+    "🗑️ 削除";
+
+  parent.appendChild(
+    deleteButton
+  );
 
 }
 
@@ -961,7 +1212,9 @@ function assetName(
     ASSETS[assetKey];
 
   if (!asset) {
+
     return assetKey;
+
   }
 
   return kidMode
@@ -981,88 +1234,120 @@ function renderSummary() {
     getCurrentChild();
 
   const result =
-    calculateChild(child);
+    calculateChild(
+      child
+    );
 
 
   if ($("total")) {
+
     $("total").textContent =
       yen(result.total);
+
   }
 
 
   if ($("cash")) {
+
     $("cash").textContent =
       yen(result.balances.cash);
+
   }
 
 
   if ($("invest")) {
+
     $("invest").textContent =
       yen(result.investmentValue);
+
   }
 
 
   if ($("ins")) {
+
     $("ins").textContent =
       yen(result.totalIn);
+
   }
 
 
   if ($("outs")) {
+
     $("outs").textContent =
       yen(result.totalOut);
+
   }
 
 
   if ($("pnl")) {
+
     $("pnl").textContent =
       signedYen(result.pnl);
+
   }
 
 
   if (kidMode) {
 
     if ($("totalL")) {
+
       $("totalL").textContent =
         "ぜんぶ";
+
     }
 
     if ($("cashL")) {
+
       $("cashL").textContent =
         "ためている";
+
     }
 
     if ($("investL")) {
+
       $("investL").textContent =
         "ふやしている";
+
     }
 
     if ($("note")) {
+
       $("note").textContent =
         "おかねの ぜんぶ";
+
     }
 
   } else {
 
     if ($("totalL")) {
+
       $("totalL").textContent =
         "総資産";
+
     }
 
     if ($("cashL")) {
+
       $("cashL").textContent =
         "貯金";
+
     }
 
     if ($("investL")) {
+
       $("investL").textContent =
         "投資";
+
     }
 
     if ($("note")) {
+
       $("note").textContent =
         "投資損益 " +
-        signedYen(result.pnl);
+        signedYen(
+          result.pnl
+        );
+
     }
 
   }
@@ -1080,30 +1365,43 @@ function renderAssets() {
     getCurrentChild();
 
   const result =
-    calculateChild(child);
+    calculateChild(
+      child
+    );
 
   const container =
     $("assets");
 
 
   if (!container) {
+
     return;
+
   }
 
 
-  container.innerHTML = "";
+  container.innerHTML =
+    "";
 
 
   for (
-    const [key, asset]
-    of Object.entries(ASSETS)
+    const [
+      key,
+      asset
+    ]
+    of Object.entries(
+      ASSETS
+    )
   ) {
 
     let value = 0;
+
     let principal = 0;
 
 
-    if (key === "cash") {
+    if (
+      key === "cash"
+    ) {
 
       value =
         result.balances.cash;
@@ -1144,10 +1442,10 @@ function renderAssets() {
       kidMode
 
         ? (
-          asset.risk === "小"
-            ? "へりにくい"
-            : "へることもある"
-        )
+            asset.risk === "小"
+              ? "へりにくい"
+              : "へることもある"
+          )
 
         : "リスク：" +
           asset.risk;
@@ -1156,7 +1454,9 @@ function renderAssets() {
     let meta = "";
 
 
-    if (key === "cash") {
+    if (
+      key === "cash"
+    ) {
 
       meta =
         kidMode
@@ -1166,7 +1466,8 @@ function renderAssets() {
     } else {
 
       const pnl =
-        value - principal;
+        value -
+        principal;
 
 
       const indexReturn =
@@ -1183,33 +1484,39 @@ function renderAssets() {
         kidMode
 
           ? (
-            "いれた おかね " +
-            yen(principal) +
-            " · " +
-            (
-              pnl >= 0
-                ? "ふえた "
-                : "へった "
-            ) +
-            yen(Math.abs(pnl))
-          )
+              "いれた おかね " +
+              yen(principal) +
+              " · " +
+              (
+                pnl >= 0
+                  ? "ふえた "
+                  : "へった "
+              ) +
+              yen(
+                Math.abs(pnl)
+              )
+            )
 
           : (
-            "元本 " +
-            yen(principal) +
-            " · 損益 " +
-            signedYen(pnl)
-          );
+              "元本 " +
+              yen(principal) +
+              " · 損益 " +
+              signedYen(pnl)
+            );
 
 
       if (
         indexReturn !== null &&
-        Number.isFinite(indexReturn)
+        Number.isFinite(
+          indexReturn
+        )
       ) {
 
         meta +=
           " · 指数 " +
-          percent(indexReturn);
+          percent(
+            indexReturn
+          );
 
       }
 
@@ -1231,7 +1538,9 @@ function renderAssets() {
       </div>
 
       <h3>
-        ${escapeHtml(assetName(key))}
+        ${escapeHtml(
+          assetName(key)
+        )}
       </h3>
 
       <div class="value">
@@ -1264,7 +1573,9 @@ function getLatestInvestmentDate(
 ) {
 
   if (!child) {
+
     return today();
+
   }
 
 
@@ -1273,19 +1584,24 @@ function getLatestInvestmentDate(
 
       .filter(
         tx =>
-          tx.asset === assetKey &&
-          tx.type === "in"
+          tx.asset ===
+            assetKey &&
+          tx.type ===
+            "in"
       )
 
       .map(
-        tx => String(tx.date)
+        tx =>
+          String(tx.date)
       )
 
       .sort();
 
 
   return (
-    dates[dates.length - 1] ||
+    dates[
+      dates.length - 1
+    ] ||
     today()
   );
 
@@ -1302,15 +1618,19 @@ function renderAssetFilter() {
     $("af");
 
   if (!select) {
+
     return;
+
   }
 
 
   const current =
-    select.value || "all";
+    select.value ||
+    "all";
 
 
-  select.innerHTML = "";
+  select.innerHTML =
+    "";
 
 
   const all =
@@ -1330,8 +1650,13 @@ function renderAssetFilter() {
 
 
   for (
-    const [key, asset]
-    of Object.entries(ASSETS)
+    const [
+      key,
+      asset
+    ]
+    of Object.entries(
+      ASSETS
+    )
   ) {
 
     const option =
@@ -1359,7 +1684,8 @@ function renderAssetFilter() {
       select.options
     ).some(
       option =>
-        option.value === current
+        option.value ===
+        current
     )
   ) {
 
@@ -1385,7 +1711,9 @@ function renderTransactions() {
 
 
   if (!container) {
+
     return;
+
   }
 
 
@@ -1400,11 +1728,14 @@ function renderTransactions() {
 
 
   let transactions =
-    [...(child?.transactions || [])];
+    [
+      ...(child?.transactions || [])
+    ];
 
 
   if (
-    typeFilter !== "all"
+    typeFilter !==
+    "all"
   ) {
 
     transactions =
@@ -1418,7 +1749,8 @@ function renderTransactions() {
 
 
   if (
-    assetFilter !== "all"
+    assetFilter !==
+    "all"
   ) {
 
     transactions =
@@ -1433,13 +1765,19 @@ function renderTransactions() {
 
   transactions.sort(
     (a, b) =>
-      String(b.date).localeCompare(
-        String(a.date)
+      String(
+        b.date
+      ).localeCompare(
+        String(
+          a.date
+        )
       )
   );
 
 
-  if (!transactions.length) {
+  if (
+    !transactions.length
+  ) {
 
     container.innerHTML = `
 
@@ -1460,7 +1798,8 @@ function renderTransactions() {
   }
 
 
-  container.innerHTML = "";
+  container.innerHTML =
+    "";
 
 
   for (
@@ -1499,7 +1838,9 @@ function renderTransactions() {
     let indexInfo = "";
 
 
-    if (marketIndex) {
+    if (
+      marketIndex
+    ) {
 
       indexInfo = `
 
@@ -1523,13 +1864,49 @@ function renderTransactions() {
 
     card.innerHTML = `
 
-      <strong>
+      <div class="section-header">
 
-        ${escapeHtml(tx.date)}
-        ·
-        ${sign}${yen(tx.amount)}
+        <strong>
 
-      </strong>
+          ${escapeHtml(
+            tx.date
+          )}
+
+          ·
+
+          ${sign}${yen(
+            tx.amount
+          )}
+
+        </strong>
+
+
+        <div class="button-group">
+
+          <button
+            type="button"
+            class="secondary"
+            data-tx-edit="${escapeHtml(
+              tx.id
+            )}"
+          >
+            ✏️ 編集
+          </button>
+
+
+          <button
+            type="button"
+            class="secondary"
+            data-tx-delete="${escapeHtml(
+              tx.id
+            )}"
+          >
+            🗑️ 削除
+          </button>
+
+        </div>
+
+      </div>
 
 
       <div>
@@ -1541,12 +1918,16 @@ function renderTransactions() {
         ·
 
         ${
-          ASSETS[tx.asset]?.icon ||
+          ASSETS[
+            tx.asset
+          ]?.icon ||
           "💰"
         }
 
         ${escapeHtml(
-          assetName(tx.asset)
+          assetName(
+            tx.asset
+          )
         )}
 
       </div>
@@ -1557,11 +1938,19 @@ function renderTransactions() {
 
       ${
         tx.memo
+
           ? `
+
             <div class="meta">
-              ${escapeHtml(tx.memo)}
+
+              ${escapeHtml(
+                tx.memo
+              )}
+
             </div>
+
           `
+
           : ""
       }
 
@@ -1588,11 +1977,14 @@ function renderMarket() {
 
 
   if (!container) {
+
     return;
+
   }
 
 
-  container.innerHTML = "";
+  container.innerHTML =
+    "";
 
 
   const markets = [
@@ -1639,7 +2031,9 @@ function renderMarket() {
 
     if (
       !data ||
-      !Array.isArray(data.series) ||
+      !Array.isArray(
+        data.series
+      ) ||
       !data.series.length
     ) {
 
@@ -1673,11 +2067,15 @@ function renderMarket() {
 
 
       const value =
-        Number(latest.value);
+        Number(
+          latest.value
+        );
 
 
       const change =
-        Number(data.change) || 0;
+        Number(
+          data.change
+        ) || 0;
 
 
       card.innerHTML = `
@@ -1737,7 +2135,9 @@ function renderMarket() {
 
 
   if (!status) {
+
     return;
+
   }
 
 
@@ -1800,9 +2200,11 @@ async function fetchMarketData() {
 
 
     if (!response.ok) {
+
       throw new Error(
         "market.json response error"
       );
+
     }
 
 
@@ -1887,7 +2289,8 @@ function validateMarketData(
 
   if (
     !data ||
-    typeof data !== "object"
+    typeof data !==
+      "object"
   ) {
 
     throw new Error(
@@ -1899,7 +2302,8 @@ function validateMarketData(
 
   if (
     !data.markets ||
-    typeof data.markets !== "object"
+    typeof data.markets !==
+      "object"
   ) {
 
     throw new Error(
@@ -1953,24 +2357,6 @@ function validateMarketData(
    GOALS
 ============================================================ */
 
-/*
-  ★今回の重要修正
-
-  旧コード：
-
-      const container = $("goals");
-
-      container.innerHTML = "";
-
-  これだと「めあて」画面そのものを消してしまう。
-
-  新コード：
-
-      const container = $("goalsList");
-
-  目標リストだけを書き換える。
-*/
-
 function renderGoals() {
 
   const child =
@@ -1981,11 +2367,14 @@ function renderGoals() {
 
 
   if (!container) {
+
     return;
+
   }
 
 
-  container.innerHTML = "";
+  container.innerHTML =
+    "";
 
 
   const goals =
@@ -2014,7 +2403,9 @@ function renderGoals() {
 
 
   const current =
-    calculateChild(child);
+    calculateChild(
+      child
+    );
 
 
   const totalSaved =
@@ -2026,16 +2417,15 @@ function renderGoals() {
   ) {
 
     const amount =
-      Number(goal.amount) || 0;
+      Number(
+        goal.amount
+      ) || 0;
 
-
-    /*
-      既存データとの互換性を維持しつつ、
-      「いま いくら？」も利用する。
-    */
 
     const manualSaved =
-      Number(goal.saved) || 0;
+      Number(
+        goal.saved
+      ) || 0;
 
 
     const saved =
@@ -2050,7 +2440,10 @@ function renderGoals() {
         ? Math.min(
             100,
             Math.round(
-              (saved / amount) *
+              (
+                saved /
+                amount
+              ) *
               100
             )
           )
@@ -2114,7 +2507,8 @@ function renderGoals() {
           ${yen(
             Math.max(
               0,
-              amount - saved
+              amount -
+              saved
             )
           )}
         </span>
@@ -2144,7 +2538,9 @@ function drawChart() {
 
 
   if (!canvas) {
+
     return;
+
   }
 
 
@@ -2155,7 +2551,9 @@ function drawChart() {
 
 
   if (!context) {
+
     return;
+
   }
 
 
@@ -2235,10 +2633,16 @@ function drawChart() {
 
 
   const transactions =
-    [...child.transactions].sort(
+    [
+      ...child.transactions
+    ].sort(
       (a, b) =>
-        String(a.date).localeCompare(
-          String(b.date)
+        String(
+          a.date
+        ).localeCompare(
+          String(
+            b.date
+          )
         )
     );
 
@@ -2253,7 +2657,9 @@ function drawChart() {
   ) {
 
     const amount =
-      Number(tx.amount) || 0;
+      Number(
+        tx.amount
+      ) || 0;
 
 
     if (
@@ -2279,7 +2685,9 @@ function drawChart() {
 
 
   if (!points.length) {
+
     return;
+
   }
 
 
@@ -2324,7 +2732,10 @@ function drawChart() {
 
 
   points.forEach(
-    (value, index) => {
+    (
+      value,
+      index
+    ) => {
 
       const x =
         left +
@@ -2332,10 +2743,14 @@ function drawChart() {
           index /
           Math.max(
             1,
-            points.length - 1
+            points.length -
+              1
           )
         ) *
-        (right - left);
+        (
+          right -
+          left
+        );
 
 
       const normalized =
@@ -2344,18 +2759,29 @@ function drawChart() {
           ? 0.5
 
           : (
-            (value - min) /
-            (max - min)
-          );
+              (
+                value -
+                min
+              ) /
+              (
+                max -
+                min
+              )
+            );
 
 
       const y =
         bottom -
         normalized *
-        (bottom - top);
+        (
+          bottom -
+          top
+        );
 
 
-      if (index === 0) {
+      if (
+        index === 0
+      ) {
 
         context.moveTo(
           x,
@@ -2388,7 +2814,8 @@ function drawChart() {
   context.fillText(
     yen(
       points[
-        points.length - 1
+        points.length -
+        1
       ]
     ),
     left,
@@ -2440,48 +2867,609 @@ function renderAll() {
 
 
 /* ============================================================
+   CHILD MODAL
+============================================================ */
+
+function openChildModal(
+  childId = null
+) {
+
+  editingChildId =
+    childId;
+
+
+  const modal =
+    $("childModal");
+
+
+  if (!modal) {
+
+    return;
+
+  }
+
+
+  const title =
+    modal.querySelector(
+      "h2"
+    );
+
+
+  const submit =
+    $("childForm")
+      ?.querySelector(
+        'button[type="submit"]'
+      );
+
+
+  /*
+   * 編集
+   */
+
+  if (
+    childId
+  ) {
+
+    const child =
+      getChildById(
+        childId
+      );
+
+
+    if (!child) {
+
+      return;
+
+    }
+
+
+    if ($("childName")) {
+
+      $("childName").value =
+        child.name ||
+        "";
+
+    }
+
+
+    if ($("birth")) {
+
+      $("birth").value =
+        child.birthYear ??
+        "";
+
+    }
+
+
+    if (title) {
+
+      title.textContent =
+        "こどもを へんこう";
+
+    }
+
+
+    if (submit) {
+
+      submit.textContent =
+        "変更を ほぞん";
+
+    }
+
+  } else {
+
+    /*
+     * 新規追加
+     */
+
+    if ($("childName")) {
+
+      $("childName").value =
+        "";
+
+    }
+
+
+    if ($("birth")) {
+
+      $("birth").value =
+        "";
+
+    }
+
+
+    if (title) {
+
+      title.textContent =
+        "こどもを ついか";
+
+    }
+
+
+    if (submit) {
+
+      submit.textContent =
+        "ついか";
+
+    }
+
+  }
+
+
+  modal.classList.remove(
+    "hidden"
+  );
+
+}
+
+
+/* ============================================================
+   CHILD SUBMIT
+============================================================ */
+
+function handleChildSubmit(
+  event
+) {
+
+  event.preventDefault();
+
+
+  const name =
+    $("childName")
+      ?.value
+      ?.trim();
+
+
+  const birthValue =
+    $("birth")
+      ?.value;
+
+
+  const birthYear =
+    Number(
+      birthValue
+    );
+
+
+  if (!name) {
+
+    alert(
+      "なまえを いれてください。"
+    );
+
+    return;
+
+  }
+
+
+  if (
+    birthValue === "" ||
+    !Number.isFinite(
+      birthYear
+    )
+  ) {
+
+    alert(
+      "うまれた年を いれてください。"
+    );
+
+    return;
+
+  }
+
+
+  /*
+   * 編集
+   */
+
+  if (
+    editingChildId
+  ) {
+
+    const child =
+      getChildById(
+        editingChildId
+      );
+
+
+    if (!child) {
+
+      alert(
+        "こどものデータがみつかりません。"
+      );
+
+      return;
+
+    }
+
+
+    /*
+     * 既存の
+     * transactions / goals
+     * は絶対に変更しない。
+     */
+
+    child.name =
+      name;
+
+    child.birthYear =
+      birthYear;
+
+  } else {
+
+    /*
+     * 新規追加
+     */
+
+    const child = {
+
+      id:
+        createId(),
+
+      name,
+
+      birthYear,
+
+      transactions: [],
+
+      goals: []
+
+    };
+
+
+    state.children.push(
+      child
+    );
+
+
+    selectedChildId =
+      child.id;
+
+  }
+
+
+  saveState();
+
+
+  closeModal(
+    "childModal"
+  );
+
+
+  editingChildId =
+    null;
+
+
+  if (
+    event.target &&
+    typeof event.target.reset ===
+      "function"
+  ) {
+
+    event.target.reset();
+
+  }
+
+
+  renderAll();
+
+}
+
+
+/* ============================================================
+   CHILD DELETE
+============================================================ */
+
+function deleteChild(
+  childId
+) {
+
+  const child =
+    getChildById(
+      childId
+    );
+
+
+  if (!child) {
+
+    return;
+
+  }
+
+
+  /*
+   * 子ども0人を許可しない。
+   */
+
+  if (
+    state.children.length <=
+    1
+  ) {
+
+    alert(
+      "こどもが ひとりだけのときは けせません。"
+    );
+
+    return;
+
+  }
+
+
+  const transactionCount =
+    Array.isArray(
+      child.transactions
+    )
+      ? child.transactions.length
+      : 0;
+
+
+  const goalCount =
+    Array.isArray(
+      child.goals
+    )
+      ? child.goals.length
+      : 0;
+
+
+  const message =
+
+    transactionCount ||
+    goalCount
+
+      ? (
+
+          `${child.name} のデータを すべて けします。\n\n` +
+
+          `おかねの記録：${transactionCount}件\n` +
+
+          `めあて：${goalCount}件\n\n` +
+
+          "この操作はもとにもどせません。"
+
+        )
+
+      : (
+
+          `${child.name} を けします。\n\n` +
+
+          "この操作はもとにもどせません。"
+
+        );
+
+
+  if (
+    !confirm(
+      message
+    )
+  ) {
+
+    return;
+
+  }
+
+
+  const index =
+    state.children.findIndex(
+      item =>
+        item.id ===
+        childId
+    );
+
+
+  if (
+    index < 0
+  ) {
+
+    return;
+
+  }
+
+
+  state.children.splice(
+    index,
+    1
+  );
+
+
+  /*
+   * 削除した子どもが選択中だった場合、
+   * 前の子ども → なければ先頭
+   */
+
+  if (
+    selectedChildId ===
+    childId
+  ) {
+
+    selectedChildId =
+      state.children[
+        Math.max(
+          0,
+          index - 1
+        )
+      ]?.id ||
+      state.children[0]?.id ||
+      null;
+
+  }
+
+
+  saveState();
+
+  renderAll();
+
+}
+
+
+/* ============================================================
    TRANSACTION MODAL
 ============================================================ */
 
 function openTransactionModal(
-  type
+  type,
+  transactionId = null
 ) {
 
-  if ($("txType")) {
-
-    $("txType").value =
-      type;
-
-  }
+  const child =
+    getCurrentChild();
 
 
-  if ($("txTitle")) {
+  if (!child) {
 
-    $("txTitle").textContent =
-      type === "in"
-        ? "おかねを いれる"
-        : "おかねを つかう";
+    return;
 
   }
 
 
-  if ($("date")) {
-    $("date").value =
-      today();
+  const isEditing =
+    Boolean(
+      transactionId
+    );
+
+
+  /*
+   * 新規
+   */
+
+  if (!isEditing) {
+
+    editingTransactionId =
+      null;
+
+
+    if ($("txType")) {
+
+      $("txType").value =
+        type;
+
+    }
+
+
+    if ($("txTitle")) {
+
+      $("txTitle").textContent =
+        type === "in"
+          ? "おかねを いれる"
+          : "おかねを つかう";
+
+    }
+
+
+    if ($("date")) {
+
+      $("date").value =
+        today();
+
+    }
+
+
+    if ($("amount")) {
+
+      $("amount").value =
+        "";
+
+    }
+
+
+    if ($("reason")) {
+
+      $("reason").selectedIndex =
+        0;
+
+    }
+
+
+    if ($("memo")) {
+
+      $("memo").value =
+        "";
+
+    }
+
+  } else {
+
+    /*
+     * 編集
+     */
+
+    const tx =
+      child.transactions?.find(
+        item =>
+          item.id ===
+          transactionId
+      );
+
+
+    if (!tx) {
+
+      return;
+
+    }
+
+
+    editingTransactionId =
+      transactionId;
+
+
+    if ($("txType")) {
+
+      $("txType").value =
+        tx.type;
+
+    }
+
+
+    if ($("txTitle")) {
+
+      $("txTitle").textContent =
+        tx.type === "in"
+          ? "おかねを へんこう"
+          : "つかった おかねを へんこう";
+
+    }
+
+
+    if ($("date")) {
+
+      $("date").value =
+        tx.date ||
+        today();
+
+    }
+
+
+    if ($("amount")) {
+
+      $("amount").value =
+        tx.amount ??
+        "";
+
+    }
+
+
+    if ($("reason")) {
+
+      $("reason").value =
+        tx.reason ||
+        "";
+
+    }
+
+
+    if ($("memo")) {
+
+      $("memo").value =
+        tx.memo ||
+        "";
+
+    }
+
   }
 
 
-  if ($("amount")) {
-    $("amount").value =
-      "";
-  }
-
-
-  if ($("memo")) {
-    $("memo").value =
-      "";
-  }
-
+  /*
+   * 資産選択肢
+   */
 
   const assetSelect =
     $("asset");
@@ -2489,13 +3477,30 @@ function openTransactionModal(
 
   if (assetSelect) {
 
+    const currentAsset =
+      isEditing
+
+        ? child.transactions?.find(
+            tx =>
+              tx.id ===
+              transactionId
+          )?.asset
+
+        : "cash";
+
+
     assetSelect.innerHTML =
       "";
 
 
     for (
-      const [key, asset]
-      of Object.entries(ASSETS)
+      const [
+        key,
+        asset
+      ]
+      of Object.entries(
+        ASSETS
+      )
     ) {
 
       const option =
@@ -2511,7 +3516,20 @@ function openTransactionModal(
       option.textContent =
         asset.icon +
         " " +
-        assetName(key);
+        assetName(
+          key
+        );
+
+
+      if (
+        key ===
+        currentAsset
+      ) {
+
+        option.selected =
+          true;
+
+      }
 
 
       assetSelect.appendChild(
@@ -2523,30 +3541,32 @@ function openTransactionModal(
   }
 
 
-  $("txModal")
-    ?.classList
-    .remove("hidden");
+  /*
+   * 送信ボタン
+   */
 
-}
-
-
-/* ============================================================
-   CLOSE MODAL
-============================================================ */
-
-function closeModal(id) {
-
-  const modal =
-    $(id);
+  const submit =
+    $("txForm")
+      ?.querySelector(
+        'button[type="submit"]'
+      );
 
 
-  if (modal) {
+  if (submit) {
 
-    modal.classList.add(
-      "hidden"
-    );
+    submit.textContent =
+      isEditing
+        ? "変更を ほぞん"
+        : "きろくする";
 
   }
+
+
+  $("txModal")
+    ?.classList
+    .remove(
+      "hidden"
+    );
 
 }
 
@@ -2567,28 +3587,58 @@ function handleTransactionSubmit(
 
 
   if (!child) {
+
     return;
+
   }
 
 
   const type =
-    $("txType")?.value ||
+    $("txType")
+      ?.value ||
     "in";
 
 
   const amount =
     Number(
-      $("amount")?.value
+      $("amount")
+        ?.value
     );
 
 
   const asset =
-    $("asset")?.value ||
+    $("asset")
+      ?.value ||
     "cash";
 
 
+  const date =
+    $("date")
+      ?.value ||
+    today();
+
+
+  const reason =
+    $("reason")
+      ?.value ||
+    "";
+
+
+  const memo =
+    $("memo")
+      ?.value
+      ?.trim() ||
+    "";
+
+
+  /*
+   * 入力値チェック
+   */
+
   if (
-    !amount ||
+    !Number.isFinite(
+      amount
+    ) ||
     amount <= 0
   ) {
 
@@ -2602,17 +3652,101 @@ function handleTransactionSubmit(
 
 
   if (
+    !ASSETS[asset]
+  ) {
+
+    alert(
+      "資産の種類を確認してください。"
+    );
+
+    return;
+
+  }
+
+
+  /*
+   * 編集対象を取得
+   */
+
+  let editingTx =
+    null;
+
+  let editingIndex =
+    -1;
+
+
+  if (
+    editingTransactionId
+  ) {
+
+    editingIndex =
+      child.transactions.findIndex(
+        tx =>
+          tx.id ===
+          editingTransactionId
+      );
+
+
+    if (
+      editingIndex >= 0
+    ) {
+
+      editingTx =
+        child.transactions[
+          editingIndex
+        ];
+
+    }
+
+  }
+
+
+  /*
+   * 編集の場合、
+   * いったん元の取引を除外する。
+   *
+   * これにより、
+   *
+   * 1000円入金
+   * ↓
+   * 1500円に変更
+   *
+   * のような編集でも、
+   * 元の1000円を含めて残高判定する
+   * 問題を防ぐ。
+   */
+
+  if (
+    editingIndex >= 0
+  ) {
+
+    child.transactions.splice(
+      editingIndex,
+      1
+    );
+
+  }
+
+
+  /*
+   * 出金の残高チェック
+   */
+
+  if (
     type === "out"
   ) {
 
     const current =
-      calculateChild(child);
+      calculateChild(
+        child
+      );
 
 
     const available =
       current.balances[
         asset
-      ] || 0;
+      ] ||
+      0;
 
 
     if (
@@ -2621,14 +3755,34 @@ function handleTransactionSubmit(
       0.0001
     ) {
 
+      /*
+       * 元の取引を復元
+       */
+
+      if (
+        editingTx
+      ) {
+
+        child.transactions.splice(
+          editingIndex,
+          0,
+          editingTx
+        );
+
+      }
+
+
       alert(
 
         "のこっている おかねより おおきいよ。\n\n" +
 
         "のこり：" +
-        yen(available)
+        yen(
+          available
+        )
 
       );
+
 
       return;
 
@@ -2637,10 +3791,10 @@ function handleTransactionSubmit(
   }
 
 
-  const date =
-    $("date")?.value ||
-    today();
-
+  /*
+   * 投資の場合、
+   * 新しい取引日で指数を再取得
+   */
 
   let indexAtTransaction =
     null;
@@ -2660,9 +3814,15 @@ function handleTransactionSubmit(
   }
 
 
-  child.transactions.push({
+  /*
+   * 取引オブジェクト
+   */
 
-    id: createId(),
+  const tx = {
+
+    id:
+      editingTx?.id ||
+      createId(),
 
     type,
 
@@ -2670,29 +3830,70 @@ function handleTransactionSubmit(
 
     amount,
 
-    reason:
-      $("reason")?.value ||
-      "",
+    reason,
 
     asset,
 
-    memo:
-      $("memo")?.value.trim() ||
-      "",
+    memo,
 
     indexAtTransaction,
 
     createdAt:
+      editingTx?.createdAt ||
       new Date().toISOString()
 
-  });
+  };
+
+
+  /*
+   * 編集なら元の位置へ戻す。
+   */
+
+  if (
+    editingIndex >= 0
+  ) {
+
+    child.transactions.splice(
+      editingIndex,
+      0,
+      tx
+    );
+
+  } else {
+
+    /*
+     * 新規追加
+     */
+
+    child.transactions.push(
+      tx
+    );
+
+  }
 
 
   saveState();
 
+
   closeModal(
     "txModal"
   );
+
+
+  editingTransactionId =
+    null;
+
+
+  if (
+    event.target &&
+    typeof event.target.reset ===
+      "function"
+  ) {
+
+    event.target.reset();
+
+  }
+
 
   renderAll();
 
@@ -2700,73 +3901,149 @@ function handleTransactionSubmit(
 
 
 /* ============================================================
-   ADD CHILD
+   TRANSACTION EDIT
 ============================================================ */
 
-function handleChildSubmit(
-  event
+function editTransaction(
+  transactionId
 ) {
 
-  event.preventDefault();
+  openTransactionModal(
+    "edit",
+    transactionId
+  );
+
+}
 
 
-  const name =
-    $("childName")
-      ?.value
-      .trim();
+/* ============================================================
+   TRANSACTION DELETE
+============================================================ */
+
+function deleteTransaction(
+  transactionId
+) {
+
+  const child =
+    getCurrentChild();
 
 
-  const birthYear =
-    Number(
-      $("birth")?.value
-    );
-
-
-  if (!name) {
-
-    alert(
-      "なまえを いれてください。"
-    );
+  if (!child) {
 
     return;
 
   }
 
 
-  const child = {
-
-    id: createId(),
-
-    name,
-
-    birthYear,
-
-    transactions: [],
-
-    goals: []
-
-  };
+  const index =
+    child.transactions.findIndex(
+      tx =>
+        tx.id ===
+        transactionId
+    );
 
 
-  state.children.push(
-    child
+  if (
+    index < 0
+  ) {
+
+    return;
+
+  }
+
+
+  const tx =
+    child.transactions[
+      index
+    ];
+
+
+  const label =
+    tx.type === "in"
+      ? "入金"
+      : "出金";
+
+
+  const ok =
+    confirm(
+
+      `${label} ${yen(
+        tx.amount
+      )} の記録を削除しますか？\n\n` +
+
+      `${tx.date}\n` +
+
+      `${tx.reason || ""}`
+
+    );
+
+
+  if (!ok) {
+
+    return;
+
+  }
+
+
+  child.transactions.splice(
+    index,
+    1
   );
-
-
-  selectedChildId =
-    child.id;
 
 
   saveState();
 
-  closeModal(
-    "childModal"
-  );
-
-
-  event.target.reset();
-
   renderAll();
+
+}
+
+
+/* ============================================================
+   CLOSE MODAL
+============================================================ */
+
+function closeModal(
+  id
+) {
+
+  const modal =
+    $(id);
+
+
+  if (modal) {
+
+    modal.classList.add(
+      "hidden"
+    );
+
+  }
+
+
+  /*
+   * モーダルを閉じたときに
+   * 編集状態を残さない。
+   *
+   * ただしsubmit直後などでも問題ない。
+   */
+
+  if (
+    id === "childModal"
+  ) {
+
+    editingChildId =
+      null;
+
+  }
+
+
+  if (
+    id === "txModal"
+  ) {
+
+    editingTransactionId =
+      null;
+
+  }
 
 }
 
@@ -2787,7 +4064,9 @@ function handleGoalSubmit(
 
 
   if (!child) {
+
     return;
+
   }
 
 
@@ -2799,17 +4078,20 @@ function handleGoalSubmit(
 
   const amount =
     Number(
-      $("goalAmount")?.value
+      $("goalAmount")
+        ?.value
     );
 
 
   const date =
-    $("goalDate")?.value;
+    $("goalDate")
+      ?.value;
 
 
   const saved =
     Number(
-      $("goalSaved")?.value
+      $("goalSaved")
+        ?.value
     ) || 0;
 
 
@@ -2841,7 +4123,8 @@ function handleGoalSubmit(
 
   child.goals.push({
 
-    id: createId(),
+    id:
+      createId(),
 
     name,
 
@@ -2861,7 +4144,16 @@ function handleGoalSubmit(
   );
 
 
-  event.target.reset();
+  if (
+    event.target &&
+    typeof event.target.reset ===
+      "function"
+  ) {
+
+    event.target.reset();
+
+  }
+
 
   renderAll();
 
@@ -2879,14 +4171,17 @@ function simulateFuture() {
 
 
   const current =
-    calculateChild(child);
+    calculateChild(
+      child
+    );
 
 
   const annual =
     Math.max(
       0,
       Number(
-        $("annual")?.value
+        $("annual")
+          ?.value
       ) || 0
     );
 
@@ -2895,20 +4190,23 @@ function simulateFuture() {
     Math.max(
       1,
       Number(
-        $("years")?.value
+        $("years")
+          ?.value
       ) || 1
     );
 
 
   const saveRatio =
     Number(
-      $("saveRatio")?.value ||
+      $("saveRatio")
+        ?.value ||
       50
     ) / 100;
 
 
   const investRatio =
-    1 - saveRatio;
+    1 -
+    saveRatio;
 
 
   const cashRate =
@@ -2934,7 +4232,9 @@ function simulateFuture() {
     period
   ) {
 
-    if (rate === 0) {
+    if (
+      rate === 0
+    ) {
 
       return (
         principal +
@@ -2960,7 +4260,8 @@ function simulateFuture() {
         Math.pow(
           1 + rate,
           period
-        ) - 1
+        ) -
+        1
       ) /
       rate
 
@@ -2972,7 +4273,8 @@ function simulateFuture() {
   const futureCash =
     futureValue(
       initialCash,
-      annual * saveRatio,
+      annual *
+        saveRatio,
       cashRate,
       years
     );
@@ -2981,7 +4283,8 @@ function simulateFuture() {
   const futureInvest =
     futureValue(
       initialInvest,
-      annual * investRatio,
+      annual *
+        investRatio,
       investRate,
       years
     );
@@ -3016,14 +4319,16 @@ function simulateFuture() {
 
           · ためる
           ${Math.round(
-            saveRatio * 100
+            saveRatio *
+            100
           )}%
 
           /
 
           ふやす
           ${Math.round(
-            investRatio * 100
+            investRatio *
+            100
           )}%
 
         </p>
@@ -3053,13 +4358,15 @@ function updateRatioFromSave() {
 
   const save =
     Number(
-      $("saveRatio")?.value ||
+      $("saveRatio")
+        ?.value ||
       50
     );
 
 
   const invest =
-    100 - save;
+    100 -
+    save;
 
 
   if ($("investRatio")) {
@@ -3073,7 +4380,8 @@ function updateRatioFromSave() {
   if ($("sr")) {
 
     $("sr").textContent =
-      save + "%";
+      save +
+      "%";
 
   }
 
@@ -3081,7 +4389,8 @@ function updateRatioFromSave() {
   if ($("ir")) {
 
     $("ir").textContent =
-      invest + "%";
+      invest +
+      "%";
 
   }
 
@@ -3092,13 +4401,15 @@ function updateRatioFromInvest() {
 
   const invest =
     Number(
-      $("investRatio")?.value ||
+      $("investRatio")
+        ?.value ||
       50
     );
 
 
   const save =
-    100 - invest;
+    100 -
+    invest;
 
 
   if ($("saveRatio")) {
@@ -3112,7 +4423,8 @@ function updateRatioFromInvest() {
   if ($("sr")) {
 
     $("sr").textContent =
-      save + "%";
+      save +
+      "%";
 
   }
 
@@ -3120,7 +4432,8 @@ function updateRatioFromInvest() {
   if ($("ir")) {
 
     $("ir").textContent =
-      invest + "%";
+      invest +
+      "%";
 
   }
 
@@ -3138,12 +4451,15 @@ function updateCrash() {
 
 
   const result =
-    calculateChild(child);
+    calculateChild(
+      child
+    );
 
 
   const crash =
     Number(
-      $("crash")?.value
+      $("crash")
+        ?.value
     ) || 0;
 
 
@@ -3151,7 +4467,8 @@ function updateCrash() {
     (
       result.investmentValue *
       crash
-    ) / 100;
+    ) /
+    100;
 
 
   const after =
@@ -3271,7 +4588,7 @@ function exportData() {
 
 
   anchor.download =
-    "kids-money-v22.json";
+    "kids-money-v23.json";
 
 
   anchor.click();
@@ -3297,7 +4614,9 @@ function importData(
 
 
   if (!file) {
+
     return;
+
   }
 
 
@@ -3335,7 +4654,27 @@ function importData(
           APP_VERSION,
 
         children:
-          parsed.children
+          parsed.children.map(
+            child => ({
+
+              ...child,
+
+              transactions:
+                Array.isArray(
+                  child.transactions
+                )
+                  ? child.transactions
+                  : [],
+
+              goals:
+                Array.isArray(
+                  child.goals
+                )
+                  ? child.goals
+                  : []
+
+            })
+          )
 
       };
 
@@ -3367,6 +4706,7 @@ function importData(
         error
       );
 
+
       alert(
         "JSONが正しくありません。"
       );
@@ -3396,7 +4736,9 @@ function resetData() {
 
 
   if (!ok) {
+
     return;
+
   }
 
 
@@ -3413,6 +4755,13 @@ function resetData() {
     state.children[0].id;
 
 
+  editingChildId =
+    null;
+
+  editingTransactionId =
+    null;
+
+
   saveState();
 
   renderAll();
@@ -3424,26 +4773,14 @@ function resetData() {
    TAB NAVIGATION
 ============================================================ */
 
-/*
-  アプリ内の画面遷移をここに集約する。
-
-  これにより、
-
-  ・上部タブ
-  ・「今日のお金」
-  ・目標から戻る
-  ・おかねラボから戻る
-  ・動的に生成されたリンク
-
-  のすべてで同じ処理を使える。
-*/
-
 function switchTab(
   tabName
 ) {
 
   if (!tabName) {
+
     return;
+
   }
 
 
@@ -3499,12 +4836,9 @@ function switchTab(
     );
 
 
-  /*
-    画面切替後に必要な再描画
-  */
-
   if (
-    tabName === "home"
+    tabName ===
+    "home"
   ) {
 
     drawChart();
@@ -3513,7 +4847,8 @@ function switchTab(
 
 
   if (
-    tabName === "goals"
+    tabName ===
+    "goals"
   ) {
 
     renderGoals();
@@ -3521,14 +4856,13 @@ function switchTab(
   }
 
 
-  /*
-    iPhoneでリンクを押したとき、
-    ページ上部へ戻す。
-  */
-
   window.scrollTo({
+
     top: 0,
-    behavior: "smooth"
+
+    behavior:
+      "smooth"
+
   });
 
 }
@@ -3568,8 +4902,7 @@ function bindEvents() {
 
 
   /* ----------------------------------------------------------
-     ★重要
-     動的に生成された data-tab リンクにも対応
+     動的 data-tab
   ---------------------------------------------------------- */
 
   document.addEventListener(
@@ -3583,22 +4916,20 @@ function bindEvents() {
 
 
       if (!button) {
+
         return;
+
       }
 
-
-      /*
-        上部タブにはすでに
-        個別イベントがあるため、
-        二重実行を避ける。
-      */
 
       if (
         button.classList.contains(
           "tab"
         )
       ) {
+
         return;
+
       }
 
 
@@ -3607,7 +4938,9 @@ function bindEvents() {
 
 
       if (!tabName) {
+
         return;
+
       }
 
 
@@ -3649,9 +4982,9 @@ function bindEvents() {
       "click",
       () => {
 
-        $("childModal")
-          ?.classList
-          .remove("hidden");
+        openChildModal(
+          null
+        );
 
       }
     );
@@ -3668,7 +5001,9 @@ function bindEvents() {
 
         $("settingsModal")
           ?.classList
-          .remove("hidden");
+          .remove(
+            "hidden"
+          );
 
       }
     );
@@ -3737,7 +5072,9 @@ function bindEvents() {
      こどもモード
   ---------------------------------------------------------- */
 
-  if ($("kidMode")) {
+  if (
+    $("kidMode")
+  ) {
 
     $("kidMode").checked =
       kidMode;
@@ -3816,17 +5153,13 @@ function bindEvents() {
 
         $("goalModal")
           ?.classList
-          .remove("hidden");
+          .remove(
+            "hidden"
+          );
 
       }
     );
 
-
-  /*
-    ★今回追加
-
-    「めあて」→「今日のお金」
-  */
 
   $("goalsBack")
     ?.addEventListener(
@@ -3941,6 +5274,172 @@ function bindEvents() {
       resetData
     );
 
+
+  /* ----------------------------------------------------------
+     動的ボタン
+     ----------------------------------------------------------
+
+     ここが今回の重要部分。
+
+     子ども：
+
+     data-child-edit
+     data-child-delete
+
+     取引：
+
+     data-tx-edit
+     data-tx-delete
+
+     をすべてここで処理する。
+  ---------------------------------------------------------- */
+
+  document.addEventListener(
+    "click",
+    event => {
+
+      /*
+       * 子ども編集
+       */
+
+      const childEdit =
+        event.target.closest(
+          "[data-child-edit]"
+        );
+
+
+      if (
+        childEdit
+      ) {
+
+        event.preventDefault();
+
+
+        const childId =
+          childEdit.dataset.childEdit;
+
+
+        if (childId) {
+
+          openChildModal(
+            childId
+          );
+
+        }
+
+
+        return;
+
+      }
+
+
+      /*
+       * 子ども削除
+       */
+
+      const childDelete =
+        event.target.closest(
+          "[data-child-delete]"
+        );
+
+
+      if (
+        childDelete
+      ) {
+
+        event.preventDefault();
+
+
+        const childId =
+          childDelete.dataset.childDelete;
+
+
+        if (childId) {
+
+          deleteChild(
+            childId
+          );
+
+        }
+
+
+        return;
+
+      }
+
+
+      /*
+       * 取引編集
+       */
+
+      const txEdit =
+        event.target.closest(
+          "[data-tx-edit]"
+        );
+
+
+      if (
+        txEdit
+      ) {
+
+        event.preventDefault();
+
+
+        const transactionId =
+          txEdit.dataset.txEdit;
+
+
+        if (transactionId) {
+
+          editTransaction(
+            transactionId
+          );
+
+        }
+
+
+        return;
+
+      }
+
+
+      /*
+       * 取引削除
+       */
+
+      const txDelete =
+        event.target.closest(
+          "[data-tx-delete]"
+        );
+
+
+      if (
+        txDelete
+      ) {
+
+        event.preventDefault();
+
+
+        const transactionId =
+          txDelete.dataset.txDelete;
+
+
+        if (transactionId) {
+
+          deleteTransaction(
+            transactionId
+          );
+
+        }
+
+
+        return;
+
+      }
+
+    }
+  );
+
 }
 
 
@@ -3970,8 +5469,8 @@ function init() {
 
 
   /*
-    起動時にGitHub上の最新market.jsonを確認
-  */
+   * 起動時にGitHub上の最新market.jsonを確認
+   */
 
   fetchMarketData();
 
@@ -3981,1735 +5480,4 @@ function init() {
 document.addEventListener(
   "DOMContentLoaded",
   init
-);
-
-/* ============================================================
-   V2.7.1
-   子ども編集・削除
-   入金/出金履歴 編集・削除
-============================================================ */
-
-
-/* ============================================================
-   編集中ID
-============================================================ */
-
-let editingChildId = null;
-
-let editingTransactionId = null;
-
-
-/* ============================================================
-   CHILD SELECTOR
-   ------------------------------------------------------------
-   既存の子ども選択欄に
-   「編集」「削除」を追加
-============================================================ */
-
-function renderChildSelector() {
-
-  const select =
-    $("child");
-
-
-  if (!select) {
-    return;
-  }
-
-
-  select.innerHTML = "";
-
-
-  for (
-    const child of state.children
-  ) {
-
-    const option =
-      document.createElement(
-        "option"
-      );
-
-
-    option.value =
-      child.id;
-
-
-    option.textContent =
-      child.name;
-
-
-    select.appendChild(
-      option
-    );
-
-  }
-
-
-  if (
-    !state.children.some(
-      child =>
-        child.id ===
-        selectedChildId
-    )
-  ) {
-
-    selectedChildId =
-      state.children[0]?.id ||
-      null;
-
-  }
-
-
-  select.value =
-    selectedChildId ||
-    "";
-
-
-  /*
-   * 編集・削除ボタンを生成
-   */
-
-  const parent =
-    select.parentElement;
-
-
-  if (!parent) {
-    return;
-  }
-
-
-  let editButton =
-    document.getElementById(
-      "editChild"
-    );
-
-
-  let deleteButton =
-    document.getElementById(
-      "deleteChild"
-    );
-
-
-  if (!editButton) {
-
-    editButton =
-      document.createElement(
-        "button"
-      );
-
-
-    editButton.id =
-      "editChild";
-
-
-    editButton.type =
-      "button";
-
-
-    editButton.className =
-      "secondary";
-
-
-    editButton.textContent =
-      "✏️ 編集";
-
-
-    parent.appendChild(
-      editButton
-    );
-
-  }
-
-
-  if (!deleteButton) {
-
-    deleteButton =
-      document.createElement(
-        "button"
-      );
-
-
-    deleteButton.id =
-      "deleteChild";
-
-
-    deleteButton.type =
-      "button";
-
-
-    deleteButton.className =
-      "secondary";
-
-
-    deleteButton.textContent =
-      "🗑️ 削除";
-
-
-    parent.appendChild(
-      deleteButton
-    );
-
-  }
-
-}
-
-
-/* ============================================================
-   子ども追加・編集モーダル
-============================================================ */
-
-function openChildModal(
-  childId = null
-) {
-
-  editingChildId =
-    childId;
-
-
-  const title =
-    $("childModal")
-      ?.querySelector(
-        "h2"
-      );
-
-
-  const submit =
-    $("childForm")
-      ?.querySelector(
-        'button[type="submit"]'
-      );
-
-
-  if (
-    childId
-  ) {
-
-    const child =
-      state.children.find(
-        item =>
-          item.id ===
-          childId
-      );
-
-
-    if (!child) {
-      return;
-    }
-
-
-    if ($("childName")) {
-
-      $("childName").value =
-        child.name ||
-        "";
-
-    }
-
-
-    if ($("birth")) {
-
-      $("birth").value =
-        child.birthYear ||
-        "";
-
-    }
-
-
-    if (title) {
-
-      title.textContent =
-        "こどもを へんこう";
-
-    }
-
-
-    if (submit) {
-
-      submit.textContent =
-        "変更を ほぞん";
-
-    }
-
-  } else {
-
-    if ($("childName")) {
-
-      $("childName").value =
-        "";
-
-    }
-
-
-    if ($("birth")) {
-
-      $("birth").value =
-        "";
-
-    }
-
-
-    if (title) {
-
-      title.textContent =
-        "こどもを ついか";
-
-    }
-
-
-    if (submit) {
-
-      submit.textContent =
-        "ついか";
-
-    }
-
-  }
-
-
-  $("childModal")
-    ?.classList
-    .remove(
-      "hidden"
-    );
-
-}
-
-
-/* ============================================================
-   子ども保存
-============================================================ */
-
-function handleChildSubmit(
-  event
-) {
-
-  event.preventDefault();
-
-
-  const name =
-    $("childName")
-      ?.value
-      .trim();
-
-
-  const birthYear =
-    Number(
-      $("birth")
-        ?.value
-    );
-
-
-  if (!name) {
-
-    alert(
-      "なまえを いれてください。"
-    );
-
-    return;
-
-  }
-
-
-  if (
-    !Number.isFinite(
-      birthYear
-    )
-  ) {
-
-    alert(
-      "うまれた年を いれてください。"
-    );
-
-    return;
-
-  }
-
-
-  /*
-   * 編集
-   */
-
-  if (
-    editingChildId
-  ) {
-
-    const child =
-      state.children.find(
-        item =>
-          item.id ===
-          editingChildId
-      );
-
-
-    if (!child) {
-      return;
-    }
-
-
-    child.name =
-      name;
-
-
-    child.birthYear =
-      birthYear;
-
-
-  } else {
-
-    /*
-     * 新規追加
-     */
-
-    const child = {
-
-      id:
-        createId(),
-
-      name,
-
-      birthYear,
-
-      transactions: [],
-
-      goals: []
-
-    };
-
-
-    state.children.push(
-      child
-    );
-
-
-    selectedChildId =
-      child.id;
-
-  }
-
-
-  saveState();
-
-
-  closeModal(
-    "childModal"
-  );
-
-
-  editingChildId =
-    null;
-
-
-  event.target.reset();
-
-
-  renderAll();
-
-}
-
-
-/* ============================================================
-   子ども削除
-============================================================ */
-
-function deleteCurrentChild() {
-
-  const child =
-    getCurrentChild();
-
-
-  if (!child) {
-    return;
-  }
-
-
-  /*
-   * 最後の1人は削除しない。
-   *
-   * アプリが子ども0人になると
-   * 既存ロジックが動作しにくくなるため。
-   */
-
-  if (
-    state.children.length <=
-    1
-  ) {
-
-    alert(
-      "こどもが ひとりだけのときは けせません。"
-    );
-
-    return;
-
-  }
-
-
-  const transactionCount =
-    Array.isArray(
-      child.transactions
-    )
-      ? child.transactions.length
-      : 0;
-
-
-  const goalCount =
-    Array.isArray(
-      child.goals
-    )
-      ? child.goals.length
-      : 0;
-
-
-  const message =
-
-    transactionCount ||
-    goalCount
-
-      ? (
-
-          `${child.name} のデータを すべて けします。\n\n` +
-
-          `おかねの記録：${transactionCount}件\n` +
-
-          `めあて：${goalCount}件\n\n` +
-
-          "この操作はもとにもどせません。"
-
-        )
-
-      : (
-
-          `${child.name} を けします。\n\n` +
-
-          "この操作はもとにもどせません。"
-
-        );
-
-
-  if (
-    !confirm(
-      message
-    )
-  ) {
-
-    return;
-
-  }
-
-
-  const index =
-    state.children.findIndex(
-      item =>
-        item.id ===
-        child.id
-    );
-
-
-  if (
-    index < 0
-  ) {
-    return;
-  }
-
-
-  state.children.splice(
-    index,
-    1
-  );
-
-
-  selectedChildId =
-    state.children[
-      Math.max(
-        0,
-        index - 1
-      )
-    ]?.id ||
-    state.children[0]?.id ||
-    null;
-
-
-  saveState();
-
-
-  renderAll();
-
-}
-
-
-/* ============================================================
-   TRANSACTION MODAL
-============================================================ */
-
-function openTransactionModal(
-  type,
-  transactionId = null
-) {
-
-  const child =
-    getCurrentChild();
-
-
-  if (!child) {
-    return;
-  }
-
-
-  editingTransactionId =
-    null;
-
-
-  /*
-   * 編集モード
-   */
-
-  if (
-    transactionId
-  ) {
-
-    const tx =
-      child.transactions?.find(
-        item =>
-          item.id ===
-          transactionId
-      );
-
-
-    if (!tx) {
-      return;
-    }
-
-
-    editingTransactionId =
-      transactionId;
-
-
-    if ($("txType")) {
-
-      $("txType").value =
-        tx.type;
-
-    }
-
-
-    if ($("txTitle")) {
-
-      $("txTitle").textContent =
-        tx.type === "in"
-          ? "おかねを へんこう"
-          : "つかった おかねを へんこう";
-
-    }
-
-
-    if ($("date")) {
-
-      $("date").value =
-        tx.date ||
-        today();
-
-    }
-
-
-    if ($("amount")) {
-
-      $("amount").value =
-        tx.amount ||
-        "";
-
-    }
-
-
-    if ($("reason")) {
-
-      $("reason").value =
-        tx.reason ||
-        "";
-
-    }
-
-
-    if ($("memo")) {
-
-      $("memo").value =
-        tx.memo ||
-        "";
-
-    }
-
-
-  } else {
-
-    /*
-     * 新規追加
-     */
-
-    if ($("txType")) {
-
-      $("txType").value =
-        type;
-
-    }
-
-
-    if ($("txTitle")) {
-
-      $("txTitle").textContent =
-        type === "in"
-          ? "おかねを いれる"
-          : "おかねを つかう";
-
-    }
-
-
-    if ($("date")) {
-
-      $("date").value =
-        today();
-
-    }
-
-
-    if ($("amount")) {
-
-      $("amount").value =
-        "";
-
-    }
-
-
-    if ($("reason")) {
-
-      $("reason").selectedIndex =
-        0;
-
-    }
-
-
-    if ($("memo")) {
-
-      $("memo").value =
-        "";
-
-    }
-
-  }
-
-
-  /*
-   * 資産選択肢を生成
-   */
-
-  const assetSelect =
-    $("asset");
-
-
-  if (assetSelect) {
-
-    const currentAsset =
-      transactionId
-
-        ? child.transactions.find(
-            tx =>
-              tx.id ===
-              transactionId
-          )?.asset
-
-        : "cash";
-
-
-    assetSelect.innerHTML =
-      "";
-
-
-    for (
-      const [
-        key,
-        asset
-      ]
-      of Object.entries(
-        ASSETS
-      )
-    ) {
-
-      const option =
-        document.createElement(
-          "option"
-        );
-
-
-      option.value =
-        key;
-
-
-      option.textContent =
-        asset.icon +
-        " " +
-        assetName(
-          key
-        );
-
-
-      if (
-        key ===
-        currentAsset
-      ) {
-
-        option.selected =
-          true;
-
-      }
-
-
-      assetSelect.appendChild(
-        option
-      );
-
-    }
-
-  }
-
-
-  const submit =
-    $("txForm")
-      ?.querySelector(
-        'button[type="submit"]'
-      );
-
-
-  if (submit) {
-
-    submit.textContent =
-      transactionId
-        ? "変更を ほぞん"
-        : "きろくする";
-
-  }
-
-
-  $("txModal")
-    ?.classList
-    .remove(
-      "hidden"
-    );
-
-}
-
-
-/* ============================================================
-   Transaction保存
-============================================================ */
-
-function handleTransactionSubmit(
-  event
-) {
-
-  event.preventDefault();
-
-
-  const child =
-    getCurrentChild();
-
-
-  if (!child) {
-    return;
-  }
-
-
-  const type =
-    $("txType")
-      ?.value ||
-    "in";
-
-
-  const amount =
-    Number(
-      $("amount")
-        ?.value
-    );
-
-
-  const asset =
-    $("asset")
-      ?.value ||
-    "cash";
-
-
-  const date =
-    $("date")
-      ?.value ||
-    today();
-
-
-  const reason =
-    $("reason")
-      ?.value ||
-    "";
-
-
-  const memo =
-    $("memo")
-      ?.value
-      ?.trim() ||
-    "";
-
-
-  if (
-    !Number.isFinite(
-      amount
-    ) ||
-    amount <= 0
-  ) {
-
-    alert(
-      "いくらかを いれてください。"
-    );
-
-    return;
-
-  }
-
-
-  /*
-   * 編集対象
-   */
-
-  let editingTx =
-    null;
-
-
-  let editingIndex =
-    -1;
-
-
-  if (
-    editingTransactionId
-  ) {
-
-    editingIndex =
-      child.transactions.findIndex(
-        tx =>
-          tx.id ===
-          editingTransactionId
-      );
-
-
-    if (
-      editingIndex >= 0
-    ) {
-
-      editingTx =
-        child.transactions[
-          editingIndex
-        ];
-
-    }
-
-  }
-
-
-  /*
-   * 残高チェック用に、
-   * 編集対象を一旦除外。
-   */
-
-  if (
-    editingIndex >= 0
-  ) {
-
-    child.transactions.splice(
-      editingIndex,
-      1
-    );
-
-  }
-
-
-  /*
-   * 出金の場合の残高チェック
-   */
-
-  if (
-    type ===
-    "out"
-  ) {
-
-    const current =
-      calculateChild(
-        child
-      );
-
-
-    const available =
-      current.balances[
-        asset
-      ] ||
-      0;
-
-
-    if (
-      amount >
-      available +
-      0.0001
-    ) {
-
-      /*
-       * 編集前データを復元
-       */
-
-      if (
-        editingTx
-      ) {
-
-        child.transactions.splice(
-          editingIndex,
-          0,
-          editingTx
-        );
-
-      }
-
-
-      alert(
-
-        "のこっている おかねより おおきいよ。\n\n" +
-
-        "のこり：" +
-
-        yen(
-          available
-        )
-
-      );
-
-
-      return;
-
-    }
-
-  }
-
-
-  /*
-   * 投資の場合は取引時点の指数を取得
-   */
-
-  let indexAtTransaction =
-    null;
-
-
-  if (
-    asset === "world" ||
-    asset === "sp"
-  ) {
-
-    indexAtTransaction =
-      getIndexValue(
-        asset,
-        date
-      );
-
-  }
-
-
-  const tx = {
-
-    id:
-      editingTx?.id ||
-      createId(),
-
-    type,
-
-    date,
-
-    amount,
-
-    reason,
-
-    asset,
-
-    memo,
-
-    indexAtTransaction,
-
-    createdAt:
-      editingTx?.createdAt ||
-      new Date().toISOString()
-
-  };
-
-
-  /*
-   * 編集なら同じ位置へ戻す。
-   * 新規なら末尾へ追加。
-   */
-
-  if (
-    editingIndex >= 0
-  ) {
-
-    child.transactions.splice(
-      editingIndex,
-      0,
-      tx
-    );
-
-  } else {
-
-    child.transactions.push(
-      tx
-    );
-
-  }
-
-
-  saveState();
-
-
-  closeModal(
-    "txModal"
-  );
-
-
-  editingTransactionId =
-    null;
-
-
-  event.target.reset();
-
-
-  renderAll();
-
-}
-
-
-/* ============================================================
-   Transaction 編集
-============================================================ */
-
-function editTransaction(
-  transactionId
-) {
-
-  openTransactionModal(
-    "edit",
-    transactionId
-  );
-
-}
-
-
-/* ============================================================
-   Transaction 削除
-============================================================ */
-
-function deleteTransaction(
-  transactionId
-) {
-
-  const child =
-    getCurrentChild();
-
-
-  if (!child) {
-    return;
-  }
-
-
-  const index =
-    child.transactions.findIndex(
-      tx =>
-        tx.id ===
-        transactionId
-    );
-
-
-  if (
-    index < 0
-  ) {
-    return;
-  }
-
-
-  const tx =
-    child.transactions[
-      index
-    ];
-
-
-  const label =
-    tx.type === "in"
-      ? "入金"
-      : "出金";
-
-
-  const ok =
-    confirm(
-
-      `${label} ${yen(tx.amount)} の記録を削除しますか？\n\n` +
-
-      `${tx.date}\n` +
-
-      `${tx.reason || ""}`
-
-    );
-
-
-  if (!ok) {
-    return;
-  }
-
-
-  child.transactions.splice(
-    index,
-    1
-  );
-
-
-  saveState();
-
-
-  renderAll();
-
-}
-
-
-/* ============================================================
-   TRANSACTION RENDER
-============================================================ */
-
-function renderTransactions() {
-
-  const child =
-    getCurrentChild();
-
-
-  const container =
-    $("txs");
-
-
-  if (!container) {
-    return;
-  }
-
-
-  const typeFilter =
-    $("tf")
-      ?.value ||
-    "all";
-
-
-  const assetFilter =
-    $("af")
-      ?.value ||
-    "all";
-
-
-  let transactions =
-    [
-      ...(child?.transactions || [])
-    ];
-
-
-  if (
-    typeFilter !==
-    "all"
-  ) {
-
-    transactions =
-      transactions.filter(
-        tx =>
-          tx.type ===
-          typeFilter
-      );
-
-  }
-
-
-  if (
-    assetFilter !==
-    "all"
-  ) {
-
-    transactions =
-      transactions.filter(
-        tx =>
-          tx.asset ===
-          assetFilter
-      );
-
-  }
-
-
-  transactions.sort(
-    (
-      a,
-      b
-    ) =>
-      String(
-        b.date
-      ).localeCompare(
-        String(
-          a.date
-        )
-      )
-  );
-
-
-  if (
-    !transactions.length
-  ) {
-
-    container.innerHTML = `
-
-      <div class="card muted">
-
-        ${
-          kidMode
-            ? "まだ きろくが ありません。"
-            : "取引履歴がありません。"
-        }
-
-      </div>
-
-    `;
-
-
-    return;
-
-  }
-
-
-  container.innerHTML =
-    "";
-
-
-  for (
-    const tx of transactions
-  ) {
-
-    const card =
-      document.createElement(
-        "div"
-      );
-
-
-    card.className =
-      "card";
-
-
-    const sign =
-      tx.type === "in"
-        ? "＋"
-        : "−";
-
-
-    const marketIndex =
-      (
-        tx.asset === "world" ||
-        tx.asset === "sp"
-      )
-
-        ? getIndexValue(
-            tx.asset,
-            tx.date
-          )
-
-        : null;
-
-
-    let indexInfo =
-      "";
-
-
-    if (
-      marketIndex
-    ) {
-
-      indexInfo = `
-
-        <div class="meta">
-
-          ${
-            tx.type === "in"
-              ? "いれたとき"
-              : "つかったとき"
-          }
-
-          の指数：
-
-          ${marketIndex.toLocaleString()}
-
-        </div>
-
-      `;
-
-    }
-
-
-    card.innerHTML = `
-
-      <div class="section-header">
-
-        <strong>
-
-          ${escapeHtml(
-            tx.date
-          )}
-
-          ·
-
-          ${sign}${yen(
-            tx.amount
-          )}
-
-        </strong>
-
-
-        <div class="button-group">
-
-          <button
-            type="button"
-            class="secondary"
-            data-tx-edit="${escapeHtml(
-              tx.id
-            )}"
-          >
-
-            ✏️ 編集
-
-          </button>
-
-
-          <button
-            type="button"
-            class="secondary"
-            data-tx-delete="${escapeHtml(
-              tx.id
-            )}"
-          >
-
-            🗑️ 削除
-
-          </button>
-
-        </div>
-
-      </div>
-
-
-      <div>
-
-        ${escapeHtml(
-          tx.reason || ""
-        )}
-
-        ·
-
-        ${
-          ASSETS[
-            tx.asset
-          ]?.icon ||
-          "💰"
-        }
-
-        ${escapeHtml(
-          assetName(
-            tx.asset
-          )
-        )}
-
-      </div>
-
-
-      ${indexInfo}
-
-
-      ${
-        tx.memo
-
-          ? `
-
-            <div class="meta">
-
-              ${escapeHtml(
-                tx.memo
-              )}
-
-            </div>
-
-          `
-
-          : ""
-
-      }
-
-    `;
-
-
-    container.appendChild(
-      card
-    );
-
-  }
-
-}
-
-
-/* ============================================================
-   動的ボタンイベント
-============================================================ */
-
-document.addEventListener(
-  "click",
-  event => {
-
-    const childEdit =
-      event.target.closest(
-        "[data-child-edit]"
-      );
-
-
-    if (
-      childEdit
-    ) {
-
-      event.preventDefault();
-
-
-      openChildModal(
-        childEdit.dataset.childEdit
-      );
-
-
-      return;
-
-    }
-
-
-    const childDelete =
-      event.target.closest(
-        "[data-child-delete]"
-      );
-
-
-    if (
-      childDelete
-    ) {
-
-      event.preventDefault();
-
-
-      selectedChildId =
-        childDelete.dataset.childDelete;
-
-
-      deleteCurrentChild();
-
-
-      return;
-
-    }
-
-
-    const txEdit =
-      event.target.closest(
-        "[data-tx-edit]"
-      );
-
-
-    if (
-      txEdit
-    ) {
-
-      event.preventDefault();
-
-
-      editTransaction(
-        txEdit.dataset.txEdit
-      );
-
-
-      return;
-
-    }
-
-
-    const txDelete =
-      event.target.closest(
-        "[data-tx-delete]"
-      );
-
-
-    if (
-      txDelete
-    ) {
-
-      event.preventDefault();
-
-
-      deleteTransaction(
-        txDelete.dataset.txDelete
-      );
-
-
-    }
-
-  }
-);
-
-
-/* ============================================================
-   子ども選択欄の管理ボタン補完
-============================================================ */
-
-function ensureChildManagementButtons() {
-
-  const select =
-    $("child");
-
-
-  if (!select) {
-    return;
-  }
-
-
-  const parent =
-    select.parentElement;
-
-
-  if (!parent) {
-    return;
-  }
-
-
-  if (
-    !document.getElementById(
-      "editChild"
-    )
-  ) {
-
-    const button =
-      document.createElement(
-        "button"
-      );
-
-
-    button.id =
-      "editChild";
-
-
-    button.type =
-      "button";
-
-
-    button.className =
-      "secondary";
-
-
-    button.textContent =
-      "✏️ 編集";
-
-
-    button.addEventListener(
-      "click",
-      () => {
-
-        if (
-          selectedChildId
-        ) {
-
-          openChildModal(
-            selectedChildId
-          );
-
-        }
-
-      }
-    );
-
-
-    parent.appendChild(
-      button
-    );
-
-  }
-
-
-  if (
-    !document.getElementById(
-      "deleteChild"
-    )
-  ) {
-
-    const button =
-      document.createElement(
-        "button"
-      );
-
-
-    button.id =
-      "deleteChild";
-
-
-    button.type =
-      "button";
-
-
-    button.className =
-      "secondary";
-
-
-    button.textContent =
-      "🗑️ 削除";
-
-
-    button.addEventListener(
-      "click",
-      deleteCurrentChild
-    );
-
-
-    parent.appendChild(
-      button
-    );
-
-  }
-
-}
-
-
-/* ============================================================
-   初期化後の補完
-============================================================ */
-
-document.addEventListener(
-  "DOMContentLoaded",
-  () => {
-
-    /*
-     * 初期描画後に
-     * 子ども管理ボタンを作成。
-     */
-
-    ensureChildManagementButtons();
-
-
-    /*
-     * 「＋ついか」は
-     * 新規モードで開く。
-     */
-
-    $("addChild")
-      ?.addEventListener(
-        "click",
-        () => {
-
-          openChildModal(
-            null
-          );
-
-        }
-      );
-
-  }
 );
