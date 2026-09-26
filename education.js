@@ -24,6 +24,8 @@ V2.7 クイズ・学習履歴
 ・NaN / Infinity対策
 ・XSS対策
 ・Kidモード対応
+・教育画面の直前画面へ戻るナビゲーション
+・教育画面の画面履歴管理
 ============================================================
 */
 
@@ -59,7 +61,47 @@ let educationState = {
 };
 
 
+/*
+ * 現在表示している教育画面
+ *
+ * home
+ * market
+ * simulation
+ * goal
+ * quiz
+ * history
+ */
 let educationMode = "home";
+
+
+/*
+ * 教育画面の遷移履歴
+ *
+ * 例：
+ *
+ * home
+ *   ↓
+ * market
+ *   ↓
+ * market-detail
+ *
+ * 戻る
+ *
+ * market
+ *
+ *
+ * ※ market-detail のような詳細画面は
+ *   educationMode とは別に履歴へ保存する。
+ */
+let educationHistory = [];
+
+
+/*
+ * 履歴に保存できる最大件数
+ *
+ * 無制限に増えないよう安全側に制限する。
+ */
+const EDUCATION_HISTORY_LIMIT = 20;
 
 
 /* ============================================================
@@ -69,6 +111,10 @@ let educationMode = "home";
 function initEducation() {
 
   loadEducationState();
+
+  educationHistory = [];
+
+  educationMode = "home";
 
   renderEducation();
 
@@ -263,6 +309,194 @@ function clamp(
     Math.max(value, min),
     max
   );
+
+}
+
+
+/* ============================================================
+   教育画面ナビゲーション
+============================================================ */
+
+/*
+ * 教育画面を遷移する。
+ *
+ * 通常の画面遷移では、
+ * 「現在画面」を履歴へ積んでから移動する。
+ *
+ * 例：
+ *
+ * home → market
+ *
+ * history:
+ * ["home"]
+ *
+ *
+ * market → simulation
+ *
+ * history:
+ * ["home", "market"]
+ */
+function navigateEducationMode(
+  mode
+) {
+
+  const validModes = [
+    "home",
+    "market",
+    "simulation",
+    "goal",
+    "quiz",
+    "history"
+  ];
+
+
+  if (
+    !validModes.includes(
+      mode
+    )
+  ) {
+
+    mode = "home";
+
+  }
+
+
+  /*
+   * 同じ画面への遷移は履歴へ追加しない。
+   */
+  if (
+    mode === educationMode
+  ) {
+
+    renderEducation();
+
+    return;
+
+  }
+
+
+  /*
+   * 現在画面を履歴へ追加。
+   */
+  if (
+    educationMode
+  ) {
+
+    educationHistory.push(
+      educationMode
+    );
+
+  }
+
+
+  /*
+   * 履歴が大きくなりすぎないよう制限。
+   */
+  if (
+    educationHistory.length >
+    EDUCATION_HISTORY_LIMIT
+  ) {
+
+    educationHistory =
+      educationHistory.slice(
+        -EDUCATION_HISTORY_LIMIT
+      );
+
+  }
+
+
+  educationMode =
+    mode;
+
+
+  renderEducation();
+
+}
+
+
+/*
+ * 直前の教育画面へ戻る。
+ *
+ * 履歴があれば1つ取り出す。
+ *
+ * 履歴がない場合は home に戻す。
+ */
+function goBackEducation() {
+
+  if (
+    educationHistory.length > 0
+  ) {
+
+    const previousMode =
+      educationHistory.pop();
+
+
+    educationMode =
+      previousMode;
+
+
+    renderEducation();
+
+    return;
+
+  }
+
+
+  /*
+   * 履歴がない場合。
+   *
+   * home以外ならhomeへ戻す。
+   */
+  if (
+    educationMode !== "home"
+  ) {
+
+    educationMode =
+      "home";
+
+
+    renderEducation();
+
+    return;
+
+  }
+
+
+  /*
+   * 既にhomeなら何もしない。
+   */
+}
+
+
+/*
+ * 現在画面へ戻るためのボタンを生成。
+ *
+ * 履歴がある場合：
+ *   ← 戻る
+ *
+ * 履歴がない場合：
+ *   ← 戻る
+ *
+ * 見た目は同じだが、
+ * 動作は goBackEducation() に統一する。
+ */
+function renderEducationBackButton() {
+
+  return `
+
+    <div class="education-back">
+
+      <button
+        type="button"
+        class="secondary"
+        data-education-back="true"
+      >
+        ← 戻る
+      </button>
+
+    </div>
+
+  `;
 
 }
 
@@ -752,6 +986,7 @@ function renderEducationHome(
         <strong>
           ${educationState.studyDays}
         </strong>
+
         <span>
           ${
             kid
@@ -766,6 +1001,7 @@ function renderEducationHome(
         <strong>
           ${educationState.quizCorrect}
         </strong>
+
         <span>
           ${
             kid
@@ -780,6 +1016,7 @@ function renderEducationHome(
         <strong>
           ${educationState.completedLessons.length}
         </strong>
+
         <span>
           ${
             kid
@@ -813,17 +1050,7 @@ function renderEducationMarket(
 
   target.innerHTML = `
 
-    <div class="education-back">
-
-      <button
-        type="button"
-        class="secondary"
-        data-education-mode="home"
-      >
-        ← 戻る
-      </button>
-
-    </div>
+    ${renderEducationBackButton()}
 
 
     <div class="card">
@@ -1053,6 +1280,10 @@ function renderMarketLearningCard(
 }
 
 
+/* ============================================================
+   Market Why
+============================================================ */
+
 function openMarketWhy(
   name
 ) {
@@ -1068,6 +1299,43 @@ function openMarketWhy(
   }
 
 
+  /*
+   * 現在の market 画面を履歴へ積む。
+   *
+   * これにより
+   *
+   * 今日のお金
+   *   ↓
+   * なぜ？
+   *   ↓
+   * 戻る
+   *
+   * で「今日のお金」へ戻れる。
+   */
+  if (
+    educationMode === "market"
+  ) {
+
+    educationHistory.push(
+      "market"
+    );
+
+  }
+
+
+  if (
+    educationHistory.length >
+    EDUCATION_HISTORY_LIMIT
+  ) {
+
+    educationHistory =
+      educationHistory.slice(
+        -EDUCATION_HISTORY_LIMIT
+      );
+
+  }
+
+
   markLessonCompleted(
     `market-why-${name}`
   );
@@ -1075,17 +1343,7 @@ function openMarketWhy(
 
   target.innerHTML = `
 
-    <div class="education-back">
-
-      <button
-        type="button"
-        class="secondary"
-        data-education-mode="market"
-      >
-        ← 戻る
-      </button>
-
-    </div>
+    ${renderEducationBackButton()}
 
 
     <article class="card education-detail">
@@ -1143,6 +1401,11 @@ function openMarketWhy(
   `;
 
 
+  /*
+   * 詳細画面は educationMode を market のままにする。
+   *
+   * 戻るボタンは履歴の market を取り出す。
+   */
   bindEducationButtons();
 
 }
@@ -1158,17 +1421,7 @@ function renderEducationSimulation(
 
   target.innerHTML = `
 
-    <div class="education-back">
-
-      <button
-        type="button"
-        class="secondary"
-        data-education-mode="home"
-      >
-        ← 戻る
-      </button>
-
-    </div>
+    ${renderEducationBackButton()}
 
 
     <div class="simulation-tabs">
@@ -2015,17 +2268,7 @@ function renderEducationGoal(
 
   target.innerHTML = `
 
-    <div class="education-back">
-
-      <button
-        type="button"
-        class="secondary"
-        data-education-mode="home"
-      >
-        ← 戻る
-      </button>
-
-    </div>
+    ${renderEducationBackButton()}
 
 
     <div class="card">
@@ -2230,6 +2473,7 @@ function calculateGoal() {
 
     `;
 
+
     markLessonCompleted(
       "goal"
     );
@@ -2337,7 +2581,7 @@ function calculateGoal() {
         <p>
           ${
             educationText(
-              `目標までの残り金額は${(difference).toLocaleString("ja-JP")}円です。`,
+              `目標までの残り金額は${difference.toLocaleString("ja-JP")}円です。`,
               `あと ${difference.toLocaleString("ja-JP")}えん ためよう。`
             )
           }
@@ -2373,17 +2617,7 @@ function renderEducationQuiz(
 
     target.innerHTML = `
 
-      <div class="education-back">
-
-        <button
-          type="button"
-          class="secondary"
-          data-education-mode="home"
-        >
-          ← 戻る
-        </button>
-
-      </div>
+      ${renderEducationBackButton()}
 
 
       <div class="card">
@@ -2436,17 +2670,7 @@ function renderEducationQuiz(
 
   target.innerHTML = `
 
-    <div class="education-back">
-
-      <button
-        type="button"
-        class="secondary"
-        data-education-mode="home"
-      >
-        ← 戻る
-      </button>
-
-    </div>
+    ${renderEducationBackButton()}
 
 
     <article class="card quiz-card">
@@ -2880,7 +3104,7 @@ function answerQuiz(
       <button
         type="button"
         class="primary"
-        data-education-mode="quiz"
+        data-quiz-next="true"
       >
 
         ${
@@ -2911,6 +3135,33 @@ function answerQuiz(
 
 
   bindEducationButtons();
+
+}
+
+
+/*
+ * 次のクイズ。
+ *
+ * 通常の navigateEducationMode("quiz") では
+ * 同じmodeなので履歴を積まない。
+ *
+ * ただし renderEducationQuiz() を直接呼ぶことで、
+ * 「次のクイズ」で不要な画面履歴を作らない。
+ */
+function nextQuiz() {
+
+  educationState.currentQuizAnswered =
+    false;
+
+
+  saveEducationState();
+
+
+  renderEducationQuiz(
+    document.getElementById(
+      "educationContent"
+    )
+  );
 
 }
 
@@ -2972,17 +3223,7 @@ function renderEducationHistory(
 
   target.innerHTML = `
 
-    <div class="education-back">
-
-      <button
-        type="button"
-        class="secondary"
-        data-education-mode="home"
-      >
-        ← 戻る
-      </button>
-
-    </div>
+    ${renderEducationBackButton()}
 
 
     <div class="card">
@@ -3249,8 +3490,18 @@ function bindEducationButtons() {
 
   /*
    * 教育モード
+   *
+   * ここを従来の
+   *
+   * educationMode = ...
+   * renderEducation()
+   *
+   * から
+   *
+   * navigateEducationMode(...)
+   *
+   * に変更。
    */
-
   document
     .querySelectorAll(
       "[data-education-mode]"
@@ -3261,11 +3512,30 @@ function bindEducationButtons() {
         button.onclick =
           () => {
 
-            educationMode =
-              button.dataset.educationMode;
+            navigateEducationMode(
+              button.dataset.educationMode
+            );
+
+          };
+
+      }
+    );
 
 
-            renderEducation();
+  /*
+   * 直前画面へ戻る
+   */
+  document
+    .querySelectorAll(
+      "[data-education-back]"
+    )
+    .forEach(
+      button => {
+
+        button.onclick =
+          () => {
+
+            goBackEducation();
 
           };
 
@@ -3276,7 +3546,6 @@ function bindEducationButtons() {
   /*
    * Market「なぜ？」
    */
-
   document
     .querySelectorAll(
       "[data-market-why]"
@@ -3300,7 +3569,6 @@ function bindEducationButtons() {
   /*
    * Quiz
    */
-
   document
     .querySelectorAll(
       "[data-quiz-answer]"
@@ -3322,9 +3590,32 @@ function bindEducationButtons() {
 
 
   /*
+   * Quiz 次へ
+   *
+   * 通常の画面遷移ではなく、
+   * 同じQuiz画面の問題だけ更新する。
+   */
+  document
+    .querySelectorAll(
+      "[data-quiz-next]"
+    )
+    .forEach(
+      button => {
+
+        button.onclick =
+          () => {
+
+            nextQuiz();
+
+          };
+
+      }
+    );
+
+
+  /*
    * Simulation
    */
-
   bindSimulationButtons();
 
 }
@@ -3379,6 +3670,23 @@ function openEducationMode(
     mode = "home";
 
   }
+
+
+  /*
+   * 外部から教育画面を開いた場合は、
+   * それまでの教育画面履歴をいったんリセットする。
+   *
+   * 例：
+   *
+   * メイン画面
+   *   ↓
+   * お金の教育
+   *   ↓
+   * openEducationMode("home")
+   *
+   * ここから新しい教育セッションとして扱う。
+   */
+  educationHistory = [];
 
 
   educationMode =
