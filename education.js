@@ -3816,3 +3816,850 @@ document.addEventListener(
 
   }
 );
+
+/* ============================================================
+   V2.7.1 QUIZ FIX
+   ------------------------------------------------------------
+   ・2問目以降が回答済みになる問題を修正
+   ・現在表示中の問題をIDで保持
+   ・問題ごとの回答状態を完全に分離
+   ・次のクイズでは必ず未回答状態から開始
+============================================================ */
+
+let currentQuizQuestionId = null;
+let currentQuizQuestionIndex = -1;
+let currentQuizAnsweredFixed = false;
+
+
+/* ============================================================
+   現在のクイズ状態をリセット
+============================================================ */
+
+function resetCurrentQuizState() {
+
+  currentQuizQuestionId = null;
+
+  currentQuizQuestionIndex = -1;
+
+  currentQuizAnsweredFixed = false;
+
+}
+
+
+/* ============================================================
+   クイズ描画
+============================================================ */
+
+function renderEducationQuiz(
+  target
+) {
+
+  const questions =
+    getQuizQuestions();
+
+
+  if (
+    !Array.isArray(questions) ||
+    questions.length === 0
+  ) {
+
+    resetCurrentQuizState();
+
+
+    target.innerHTML = `
+
+      ${renderEducationBackButton()}
+
+      <div class="card">
+
+        <p>
+          ${
+            educationText(
+              "クイズデータがありません。",
+              "クイズが みつからないよ。"
+            )
+          }
+        </p>
+
+      </div>
+
+    `;
+
+
+    bindEducationButtons();
+
+    return;
+
+  }
+
+
+  /*
+   * 新しい問題を選択
+   *
+   * 前の問題の状態は完全に破棄する。
+   */
+
+  let index =
+    Math.floor(
+      Math.random() *
+      questions.length
+    );
+
+
+  /*
+   * 直前と同じ問題が続く場合は、
+   * 問題数が2問以上なら別問題を優先。
+   */
+
+  if (
+    questions.length > 1 &&
+    currentQuizQuestionIndex === index
+  ) {
+
+    index =
+      (
+        index + 1
+      ) %
+      questions.length;
+
+  }
+
+
+  const question =
+    questions[index];
+
+
+  if (!question) {
+
+    resetCurrentQuizState();
+
+    return;
+
+  }
+
+
+  /*
+   * 現在の問題を明示的に記録
+   */
+
+  currentQuizQuestionIndex =
+    index;
+
+  currentQuizQuestionId =
+    String(
+      question.id ??
+      `question-${index}`
+    );
+
+
+  /*
+   * 新しい問題なので必ず未回答
+   */
+
+  currentQuizAnsweredFixed =
+    false;
+
+
+  /*
+   * 旧方式の状態も念のためリセット
+   */
+
+  currentQuizAnswered =
+    false;
+
+
+  const questionText =
+    educationIsKidMode()
+      ? (
+          question.kidQuestion ||
+          question.question ||
+          ""
+        )
+      : (
+          question.question ||
+          ""
+        );
+
+
+  target.innerHTML = `
+
+    ${renderEducationBackButton()}
+
+
+    <article
+      class="card quiz-card"
+      data-current-quiz-id="${educationEscape(
+        currentQuizQuestionId
+      )}"
+    >
+
+      <span class="quiz-number">
+
+        🧠
+
+        ${
+          educationIsKidMode()
+            ? "おかねクイズ"
+            : "お金クイズ"
+        }
+
+      </span>
+
+
+      <h2>
+
+        ${educationEscape(
+          questionText
+        )}
+
+      </h2>
+
+
+      <div class="quiz-options">
+
+        ${
+          Array.isArray(
+            question.options
+          )
+
+            ? question.options
+                .map(
+                  (
+                    option,
+                    i
+                  ) => {
+
+                    const optionText =
+                      educationIsKidMode()
+
+                        ? (
+                            option?.kid ??
+                            option?.text ??
+                            option
+                          )
+
+                        : (
+                            option?.text ??
+                            option
+                          );
+
+
+                    return `
+
+                      <button
+                        type="button"
+                        class="quiz-option"
+                        data-quiz-answer="${i}"
+                        data-quiz-question-id="${educationEscape(
+                          currentQuizQuestionId
+                        )}"
+                      >
+
+                        ${educationEscape(
+                          optionText
+                        )}
+
+                      </button>
+
+                    `;
+
+                  }
+                )
+                .join("")
+
+            : ""
+
+        }
+
+      </div>
+
+
+      <div
+        id="quizResult"
+      ></div>
+
+    </article>
+
+  `;
+
+
+  /*
+   * 旧datasetも残す。
+   *
+   * 既存コードとの互換性維持。
+   */
+
+  target.dataset.quizIndex =
+    String(index);
+
+
+  target.dataset.quizAnswer =
+    String(
+      normalizeNumber(
+        question.answer,
+        0
+      )
+    );
+
+
+  target.dataset.quizQuestionId =
+    currentQuizQuestionId;
+
+
+  bindEducationButtons();
+
+}
+
+
+/* ============================================================
+   次のクイズ
+============================================================ */
+
+function nextQuiz() {
+
+  /*
+   * 現在の問題を完全に終了
+   */
+
+  resetCurrentQuizState();
+
+
+  const target =
+    document.getElementById(
+      "educationContent"
+    );
+
+
+  if (!target) {
+    return;
+  }
+
+
+  /*
+   * 新しい問題を描画
+   */
+
+  renderEducationQuiz(
+    target
+  );
+
+}
+
+
+/* ============================================================
+   クイズ回答
+============================================================ */
+
+function answerQuiz(
+  answer
+) {
+
+  const target =
+    document.getElementById(
+      "quizResult"
+    );
+
+
+  const content =
+    document.getElementById(
+      "educationContent"
+    );
+
+
+  if (
+    !target ||
+    !content
+  ) {
+
+    return;
+
+  }
+
+
+  /*
+   * 現在の問題についてのみ二重回答を防止
+   */
+
+  if (
+    currentQuizAnsweredFixed
+  ) {
+
+    return;
+
+  }
+
+
+  const questions =
+    getQuizQuestions();
+
+
+  if (
+    !Array.isArray(questions) ||
+    questions.length === 0
+  ) {
+
+    return;
+
+  }
+
+
+  /*
+   * 現在表示中の問題をIDから取得
+   */
+
+  const questionId =
+    content.dataset.quizQuestionId ||
+    currentQuizQuestionId;
+
+
+  let question =
+    questions.find(
+      item =>
+        String(
+          item?.id ??
+          ""
+        ) ===
+        String(
+          questionId ??
+          ""
+        )
+    );
+
+
+  /*
+   * IDがない古い問題データへの
+   * フォールバック
+   */
+
+  if (!question) {
+
+    const index =
+      Number(
+        content.dataset.quizIndex
+      );
+
+
+    if (
+      Number.isInteger(index) &&
+      index >= 0 &&
+      index < questions.length
+    ) {
+
+      question =
+        questions[index];
+
+    }
+
+  }
+
+
+  if (!question) {
+    return;
+  }
+
+
+  /*
+   * 回答済み状態をこの問題だけに設定
+   */
+
+  currentQuizAnsweredFixed =
+    true;
+
+
+  currentQuizAnswered =
+    true;
+
+
+  const correctAnswer =
+    normalizeNumber(
+      question.answer,
+      -999
+    );
+
+
+  const userAnswer =
+    normalizeNumber(
+      answer,
+      -999
+    );
+
+
+  const correct =
+    userAnswer ===
+    correctAnswer;
+
+
+  /*
+   * 回答履歴
+   */
+
+  educationState.quizAnswered =
+    normalizeNumber(
+      educationState.quizAnswered,
+      0
+    ) + 1;
+
+
+  if (correct) {
+
+    educationState.quizCorrect =
+      normalizeNumber(
+        educationState.quizCorrect,
+        0
+      ) + 1;
+
+  }
+
+
+  if (
+    question.id
+  ) {
+
+    markLessonCompleted(
+      `quiz-${question.id}`
+    );
+
+  }
+
+
+  saveEducationState();
+
+
+  const explanation =
+    educationIsKidMode()
+
+      ? (
+          question.kidExplanation ||
+          question.explanation ||
+          ""
+        )
+
+      : (
+          question.explanation ||
+          ""
+        );
+
+
+  target.innerHTML = `
+
+    <div class="quiz-result">
+
+      <div class="quiz-result-icon">
+
+        ${
+          correct
+            ? "⭕"
+            : "❌"
+        }
+
+      </div>
+
+
+      <h3>
+
+        ${
+          correct
+
+            ? (
+                educationIsKidMode()
+                  ? "せいかい！"
+                  : "正解！"
+              )
+
+            : (
+                educationIsKidMode()
+                  ? "ざんねん！"
+                  : "残念！"
+              )
+
+        }
+
+      </h3>
+
+
+      <p>
+
+        ${
+          correct
+
+            ? educationText(
+                "正解です。少しずつ金融知識を身につけていきましょう。",
+                "せいかい！すこしずつ おかねの ことを おぼえていこう。"
+              )
+
+            : educationText(
+                "間違っても大丈夫です。解説を読んで覚えましょう。",
+                "まちがえても だいじょうぶ。せつめいを よんで おぼえよう。"
+              )
+
+        }
+
+      </p>
+
+
+      ${
+        explanation
+
+          ? `
+
+            <div class="learn-example">
+
+              <strong>
+
+                💡
+
+                ${
+                  educationIsKidMode()
+                    ? "なぜ？"
+                    : "解説"
+                }
+
+              </strong>
+
+
+              <p>
+
+                ${educationEscape(
+                  explanation
+                )}
+
+              </p>
+
+            </div>
+
+          `
+
+          : ""
+
+      }
+
+
+      <button
+        type="button"
+        class="primary"
+        id="nextQuizButton"
+      >
+
+        ${
+          educationIsKidMode()
+            ? "つぎの クイズ"
+            : "次のクイズ"
+        }
+
+      </button>
+
+
+    </div>
+
+  `;
+
+
+  /*
+   * 回答ボタンを無効化
+   */
+
+  document
+    .querySelectorAll(
+      ".quiz-option"
+    )
+    .forEach(
+      button => {
+
+        button.disabled =
+          true;
+
+      }
+    );
+
+
+  /*
+   * 次のクイズ
+   */
+
+  document
+    .getElementById(
+      "nextQuizButton"
+    )
+    ?.addEventListener(
+      "click",
+      () => {
+
+        nextQuiz();
+
+      }
+    );
+
+}
+
+
+/* ============================================================
+   教育モード遷移時のクイズ状態リセット
+============================================================ */
+
+function navigateEducationMode(
+  mode
+) {
+
+  resetCurrentQuizState();
+
+
+  const validModes = [
+
+    "home",
+    "market",
+    "simulation",
+    "goal",
+    "quiz",
+    "history"
+
+  ];
+
+
+  if (
+    !validModes.includes(
+      mode
+    )
+  ) {
+
+    mode =
+      "home";
+
+  }
+
+
+  if (
+    mode ===
+    educationMode
+  ) {
+
+    renderEducation();
+
+    return;
+
+  }
+
+
+  if (
+    educationMode
+  ) {
+
+    educationHistory.push(
+      educationMode
+    );
+
+  }
+
+
+  if (
+    educationHistory.length >
+    EDUCATION_HISTORY_LIMIT
+  ) {
+
+    educationHistory =
+      educationHistory.slice(
+        -EDUCATION_HISTORY_LIMIT
+      );
+
+  }
+
+
+  educationMode =
+    mode;
+
+
+  renderEducation();
+
+}
+
+
+/* ============================================================
+   戻る
+============================================================ */
+
+function goBackEducation() {
+
+  resetCurrentQuizState();
+
+
+  if (
+    educationHistory.length >
+    0
+  ) {
+
+    const previousMode =
+      educationHistory.pop();
+
+
+    educationMode =
+      previousMode;
+
+
+    renderEducation();
+
+    return;
+
+  }
+
+
+  if (
+    educationMode !==
+    "home"
+  ) {
+
+    educationMode =
+      "home";
+
+
+    renderEducation();
+
+  }
+
+}
+
+
+/* ============================================================
+   外部から開く場合
+============================================================ */
+
+function openEducationMode(
+  mode
+) {
+
+  resetCurrentQuizState();
+
+
+  const validModes = [
+
+    "home",
+    "market",
+    "simulation",
+    "goal",
+    "quiz",
+    "history"
+
+  ];
+
+
+  if (
+    !validModes.includes(
+      mode
+    )
+  ) {
+
+    mode =
+      "home";
+
+  }
+
+
+  educationHistory =
+    [];
+
+
+  educationMode =
+    mode;
+
+
+  renderEducation();
+
+}
