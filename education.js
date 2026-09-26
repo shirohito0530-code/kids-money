@@ -1,4155 +1,1140 @@
 "use strict";
-
 /*
 ============================================================
-こどもマネー・ラボ V2.8
+こどもマネー・ラボ V2.9
 教育機能統合モジュール
-
-V2.4 今日の値動き・なぜ？
-V2.5 もしもシミュレーション
-     ・複利
-     ・暴落
-     ・インフレ
-V2.6 目標貯金
-V2.7 クイズ・学習履歴
-V2.8 クイズ状態管理安定化
-
-主な改善
-・JST基準の学習日管理
-・localStorageデータの安全な復元
-・学習履歴の記録
-・シミュレーション利用履歴
-・クイズ二重回答防止
-・クイズ解説
-・入力値バリデーション
-・NaN / Infinity対策
-・XSS対策
-・Kidモード対応
-・教育画面の直前画面へ戻るナビゲーション
-・教育画面の履歴管理
-・現在のクイズ状態をlocalStorageから分離
-・現在表示中のクイズをIDで管理
-・問題ごとの回答状態を完全分離
-・クイズ再描画時の回答状態リセット
+V2.9
+・子どもごとの学習履歴分離
+・子ども切替時の教育状態即時切替
+・クイズ問題数12問拡張＆重複出題防止（直近5問回避）
+・Market Data連携（marketStateを直接参照）
+・Kidモードひらがな・やさしい表現統一
+・今日のお金表示連携
 ============================================================
 */
 
+/* ============================================================
+   EDUCATION STATE
+============================================================ */
+const EDUCATION_STATE_KEY = "kidsMoneyEducationV29";
+const DEFAULT_EDUCATION_STATE = {
+  quizCorrect: 0,
+  quizAnswered: 0,
+  learnedGlossary: [],
+  completedLessons: [],
+  viewedScenarios: [],
+  lastStudyDate: null,
+  studyDays: 0
+};
+
+let educationStatesByChild = {};
+let educationState = { ...DEFAULT_EDUCATION_STATE };
 
 /* ============================================================
-   State
+   VIEW & HISTORY
 ============================================================ */
-
-const EDUCATION_STATE_KEY =
-  "kidsMoneyEducationV27";
-
-
-/*
- * localStorageへ保存するのは
- * 「学習履歴・累積データ」のみ。
- *
- * 現在表示中のクイズの回答状態は保存しない。
- */
-const DEFAULT_EDUCATION_STATE = {
-
-  quizCorrect: 0,
-
-  quizAnswered: 0,
-
-  learnedGlossary: [],
-
-  completedLessons: [],
-
-  viewedScenarios: [],
-
-  lastStudyDate: null,
-
-  studyDays: 0
-
-};
-
-
-let educationState = {
-  ...DEFAULT_EDUCATION_STATE
-};
-
-
-/*
- * 現在表示している教育画面
- *
- * home
- * market
- * simulation
- * goal
- * quiz
- * history
- */
 let educationMode = "home";
-
-
-/*
- * 教育画面の遷移履歴
- */
 let educationHistory = [];
-
-
-/*
- * 履歴に保存できる最大件数
- */
 const EDUCATION_HISTORY_LIMIT = 20;
 
-
-/*
- * ------------------------------------------------------------
- * 現在表示中のクイズ状態
- * ------------------------------------------------------------
- *
- * これらはlocalStorageへ保存しない。
- *
- * currentQuizQuestionId
- *   現在表示している問題のID
- *
- * currentQuizQuestionIndex
- *   問題配列上のindex
- *
- * currentQuizAnswered
- *   現在の問題を回答済みかどうか
- *
- * 重要：
- * 「クイズを表示しただけ」
- * と
- * 「クイズに回答した」
- * を完全に分離する。
- */
+/* ============================================================
+   QUIZ STATE
+============================================================ */
 let currentQuizQuestionId = null;
-
 let currentQuizQuestionIndex = -1;
-
 let currentQuizAnswered = false;
-
-
-/* ============================================================
-   初期化
-============================================================ */
-
-function initEducation() {
-
-  loadEducationState();
-
-  educationHistory = [];
-
-  educationMode = "home";
-
-  resetCurrentQuizState();
-
-  renderEducation();
-
-}
-
+let recentQuizQuestionIds = [];
+const RECENT_QUIZ_LIMIT = 5;
 
 /* ============================================================
-   Education State
+   CHILD HELPERS
 ============================================================ */
-
-function normalizeEducationState(
-  parsed
-) {
-
-  if (
-    !parsed ||
-    typeof parsed !== "object"
-  ) {
-
-    return {
-      ...DEFAULT_EDUCATION_STATE
-    };
-
-  }
-
-
-  const state = {
-
-    ...DEFAULT_EDUCATION_STATE,
-
-    ...parsed
-
-  };
-
-
-  state.quizCorrect =
-    normalizeNumber(
-      state.quizCorrect,
-      0
-    );
-
-
-  state.quizAnswered =
-    normalizeNumber(
-      state.quizAnswered,
-      0
-    );
-
-
-  state.studyDays =
-    normalizeNumber(
-      state.studyDays,
-      0
-    );
-
-
-  state.learnedGlossary =
-    Array.isArray(
-      state.learnedGlossary
-    )
-      ? state.learnedGlossary
-      : [];
-
-
-  state.completedLessons =
-    Array.isArray(
-      state.completedLessons
-    )
-      ? state.completedLessons
-      : [];
-
-
-  state.viewedScenarios =
-    Array.isArray(
-      state.viewedScenarios
-    )
-      ? state.viewedScenarios
-      : [];
-
-
-  state.lastStudyDate =
-    typeof state.lastStudyDate === "string"
-      ? state.lastStudyDate
-      : null;
-
-
-  /*
-   * currentQuizQuestionId
-   * currentQuizQuestionIndex
-   * currentQuizAnswered
-   *
-   * は保存しない。
-   */
-
-
-  return state;
-
-}
-
-
-function loadEducationState() {
-
+function getEducationChildId() {
   try {
-
-    const raw =
-      localStorage.getItem(
-        EDUCATION_STATE_KEY
-      );
-
-
-    if (!raw) {
-
-      educationState = {
-        ...DEFAULT_EDUCATION_STATE
-      };
-
-      return;
-
+    if (typeof selectedChildId !== "undefined" && selectedChildId) {
+      return String(selectedChildId);
     }
-
-
-    const parsed =
-      JSON.parse(raw);
-
-
-    educationState =
-      normalizeEducationState(
-        parsed
-      );
-
-
   } catch (error) {
-
-    console.error(
-      "education state load error",
-      error
-    );
-
-
-    educationState = {
-      ...DEFAULT_EDUCATION_STATE
-    };
-
+    console.warn("selectedChildId unavailable", error);
   }
-
+  return "default";
 }
 
+function createEducationState() {
+  return { ...DEFAULT_EDUCATION_STATE };
+}
+
+function normalizeEducationState(parsed) {
+  if (!parsed || typeof parsed !== "object") {
+    return createEducationState();
+  }
+  const state = {
+    ...createEducationState(),
+    ...parsed
+  };
+  state.quizCorrect = Math.max(0, Math.floor(normalizeNumber(state.quizCorrect, 0)));
+  state.quizAnswered = Math.max(0, Math.floor(normalizeNumber(state.quizAnswered, 0)));
+  state.studyDays = Math.max(0, Math.floor(normalizeNumber(state.studyDays, 0)));
+  state.learnedGlossary = Array.isArray(state.learnedGlossary) ? state.learnedGlossary : [];
+  state.completedLessons = Array.isArray(state.completedLessons) ? state.completedLessons : [];
+  state.viewedScenarios = Array.isArray(state.viewedScenarios) ? state.viewedScenarios : [];
+  state.lastStudyDate = typeof state.lastStudyDate === "string" ? state.lastStudyDate : null;
+  return state;
+}
+
+/* ============================================================
+   LOAD / SAVE STATE
+============================================================ */
+function loadEducationState() {
+  try {
+    const raw = localStorage.getItem(EDUCATION_STATE_KEY);
+    if (!raw) {
+      educationStatesByChild = {};
+      loadCurrentChildEducationState();
+      return;
+    }
+    const parsed = JSON.parse(raw);
+    
+    // V2.9 形式
+    if (parsed && typeof parsed === "object" && parsed.children && typeof parsed.children === "object") {
+      educationStatesByChild = parsed.children;
+      loadCurrentChildEducationState();
+      return;
+    }
+    
+    // 旧 V2.7/V2.8 形式からの自動移行
+    if (parsed && typeof parsed === "object") {
+      const childId = getEducationChildId();
+      educationStatesByChild = {
+        [childId]: normalizeEducationState(parsed)
+      };
+      saveEducationState();
+      loadCurrentChildEducationState();
+      return;
+    }
+    educationStatesByChild = {};
+    loadCurrentChildEducationState();
+  } catch (error) {
+    console.error("education state load error", error);
+    educationStatesByChild = {};
+    loadCurrentChildEducationState();
+  }
+}
+
+function loadCurrentChildEducationState() {
+  const childId = getEducationChildId();
+  if (!educationStatesByChild[childId]) {
+    educationStatesByChild[childId] = createEducationState();
+  }
+  educationState = normalizeEducationState(educationStatesByChild[childId]);
+}
 
 function saveEducationState() {
-
   try {
-
+    const childId = getEducationChildId();
+    educationStatesByChild[childId] = normalizeEducationState(educationState);
     localStorage.setItem(
       EDUCATION_STATE_KEY,
-      JSON.stringify(
-        educationState
-      )
+      JSON.stringify({
+        version: 29,
+        children: educationStatesByChild
+      })
     );
-
   } catch (error) {
-
-    console.error(
-      "education state save error",
-      error
-    );
-
+    console.error("education state save error", error);
   }
-
 }
 
-
-/* ============================================================
-   Utility
-============================================================ */
-
-function normalizeNumber(
-  value,
-  fallback = 0
-) {
-
-  const number =
-    Number(value);
-
-
-  if (
-    !Number.isFinite(number)
-  ) {
-
-    return fallback;
-
+function refreshEducationForChildChange() {
+  saveEducationState();
+  loadCurrentChildEducationState();
+  resetCurrentQuizState();
+  educationHistory = [];
+  educationMode = "home";
+  const target = document.getElementById("educationContent");
+  if (target) {
+    renderEducation();
   }
-
-
-  return number;
-
 }
-
-
-function clamp(
-  value,
-  min,
-  max
-) {
-
-  return Math.min(
-    Math.max(
-      value,
-      min
-    ),
-    max
-  );
-
-}
-
-
-/* ============================================================
-   現在のクイズ状態
-============================================================ */
 
 function resetCurrentQuizState() {
-
-  currentQuizQuestionId =
-    null;
-
-  currentQuizQuestionIndex =
-    -1;
-
-  currentQuizAnswered =
-    false;
-
+  currentQuizQuestionId = null;
+  currentQuizQuestionIndex = -1;
+  currentQuizAnswered = false;
 }
-
 
 /* ============================================================
-   教育画面ナビゲーション
+   UTILITY
 ============================================================ */
-
-/*
- * 教育画面を遷移する。
- *
- * 通常の画面遷移では、
- * 現在画面を履歴へ積んでから移動する。
- */
-function navigateEducationMode(
-  mode
-) {
-
-  const validModes = [
-
-    "home",
-
-    "market",
-
-    "simulation",
-
-    "goal",
-
-    "quiz",
-
-    "history"
-
-  ];
-
-
-  if (
-    !validModes.includes(
-      mode
-    )
-  ) {
-
-    mode =
-      "home";
-
-  }
-
-
-  /*
-   * 同じ画面への遷移。
-   *
-   * クイズ画面でも、
-   * 同じ画面を再表示する場合は
-   * クイズ状態をリセットする。
-   */
-  if (
-    mode === educationMode
-  ) {
-
-    if (
-      mode === "quiz"
-    ) {
-
-      resetCurrentQuizState();
-
-    }
-
-
-    renderEducation();
-
-    return;
-
-  }
-
-
-  /*
-   * 現在画面を履歴へ追加。
-   */
-  if (
-    educationMode
-  ) {
-
-    educationHistory.push(
-      educationMode
-    );
-
-  }
-
-
-  /*
-   * 履歴上限。
-   */
-  if (
-    educationHistory.length >
-    EDUCATION_HISTORY_LIMIT
-  ) {
-
-    educationHistory =
-      educationHistory.slice(
-        -EDUCATION_HISTORY_LIMIT
-      );
-
-  }
-
-
-  /*
-   * 画面遷移時は
-   * クイズ状態を完全に破棄。
-   */
-  resetCurrentQuizState();
-
-
-  educationMode =
-    mode;
-
-
-  renderEducation();
-
+function normalizeNumber(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
 }
 
-
-/*
- * 直前の教育画面へ戻る。
- */
-function goBackEducation() {
-
-  /*
-   * 戻るときは
-   * クイズ状態を完全に破棄。
-   */
-  resetCurrentQuizState();
-
-
-  /*
-   * 履歴がある場合。
-   */
-  if (
-    educationHistory.length > 0
-  ) {
-
-    const previousMode =
-      educationHistory.pop();
-
-
-    educationMode =
-      previousMode;
-
-
-    renderEducation();
-
-    return;
-
-  }
-
-
-  /*
-   * 履歴がなければhomeへ。
-   */
-  if (
-    educationMode !== "home"
-  ) {
-
-    educationMode =
-      "home";
-
-
-    renderEducation();
-
-  }
-
+function educationEscape(value) {
+  if (value === null || value === undefined) return "";
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
-
-/*
- * 教育画面共通の戻るボタン。
- */
-function renderEducationBackButton() {
-
-  return `
-
-    <div class="education-back">
-
-      <button
-        type="button"
-        class="secondary"
-        data-education-back="true"
-      >
-        ← 戻る
-      </button>
-
-    </div>
-
-  `;
-
+function educationFormatYen(value) {
+  const number = normalizeNumber(value, 0);
+  return "¥" + Math.round(number).toLocaleString("ja-JP");
 }
-
 
 /* ============================================================
-   JST日付
+   KID MODE & LABELS
 ============================================================ */
+function educationIsKidMode() {
+  return typeof kidMode !== "undefined" && kidMode === true;
+}
 
+function educationText(adult, kid) {
+  return educationIsKidMode() ? kid : adult;
+}
+
+const EDUCATION_LABELS = {
+  home: ["おかねを まなぼう", "お金を学ぼう"],
+  market: ["きょうの おかね", "今日のお金"],
+  simulation: ["もしも", "もしもシミュレーション"],
+  goal: ["もくひょう", "お金の目標"],
+  quiz: ["おかねクイズ", "お金クイズ"],
+  history: ["べんきょうきろく", "学習記録"],
+  back: ["← もどる", "← 戻る"],
+  calculate: ["けいさんする", "計算する"],
+  result: ["けっか", "結果"],
+  explanation: ["せつめい", "解説"],
+  next: ["つぎの クイズ", "次のクイズ"]
+};
+
+function educationLabel(key) {
+  const item = EDUCATION_LABELS[key];
+  if (!item) return "";
+  return educationIsKidMode() ? item[0] : item[1];
+}
+
+/* ============================================================
+   JST & STUDY RECORD
+============================================================ */
 function getJapanDateString() {
-
-  const formatter =
-    new Intl.DateTimeFormat(
-      "ja-JP",
-      {
-        timeZone: "Asia/Tokyo",
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit"
-      }
-    );
-
-
-  const parts =
-    formatter.formatToParts(
-      new Date()
-    );
-
-
-  const year =
-    parts.find(
-      part =>
-        part.type === "year"
-    )?.value;
-
-
-  const month =
-    parts.find(
-      part =>
-        part.type === "month"
-    )?.value;
-
-
-  const day =
-    parts.find(
-      part =>
-        part.type === "day"
-    )?.value;
-
-
-  if (
-    !year ||
-    !month ||
-    !day
-  ) {
-
-    return null;
-
-  }
-
-
+  const formatter = new Intl.DateTimeFormat("ja-JP", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  });
+  const parts = formatter.formatToParts(new Date());
+  const year = parts.find(p => p.type === "year")?.value;
+  const month = parts.find(p => p.type === "month")?.value;
+  const day = parts.find(p => p.type === "day")?.value;
+  if (!year || !month || !day) return null;
   return `${year}-${month}-${day}`;
-
 }
-
-
-/* ============================================================
-   学習日
-============================================================ */
 
 function recordStudy() {
-
-  const today =
-    getJapanDateString();
-
-
-  if (!today) {
-    return;
-  }
-
-
-  if (
-    educationState.lastStudyDate ===
-    today
-  ) {
-
-    return;
-
-  }
-
-
-  educationState.lastStudyDate =
-    today;
-
-
-  educationState.studyDays =
-    normalizeNumber(
-      educationState.studyDays,
-      0
-    ) + 1;
-
-
+  const today = getJapanDateString();
+  if (!today || educationState.lastStudyDate === today) return;
+  educationState.lastStudyDate = today;
+  educationState.studyDays = Math.max(0, Math.floor(normalizeNumber(educationState.studyDays, 0))) + 1;
   saveEducationState();
-
 }
 
-
-/* ============================================================
-   学習項目
-============================================================ */
-
-function markLessonCompleted(
-  lessonId
-) {
-
-  if (!lessonId) {
-    return;
-  }
-
-
-  if (
-    !educationState.completedLessons.includes(
-      lessonId
-    )
-  ) {
-
-    educationState.completedLessons.push(
-      lessonId
-    );
-
-
+function markLessonCompleted(lessonId) {
+  if (!lessonId) return;
+  if (!educationState.completedLessons.includes(lessonId)) {
+    educationState.completedLessons.push(lessonId);
     saveEducationState();
-
   }
-
 }
 
-
-function markScenarioViewed(
-  scenarioId
-) {
-
-  if (!scenarioId) {
-    return;
-  }
-
-
-  if (
-    !educationState.viewedScenarios.includes(
-      scenarioId
-    )
-  ) {
-
-    educationState.viewedScenarios.push(
-      scenarioId
-    );
-
-
+function markScenarioViewed(scenarioId) {
+  if (!scenarioId) return;
+  if (!educationState.viewedScenarios.includes(scenarioId)) {
+    educationState.viewedScenarios.push(scenarioId);
     saveEducationState();
-
   }
-
 }
-
 
 /* ============================================================
-   共通
+   NAVIGATION
 ============================================================ */
-
-function educationIsKidMode() {
-
-  return (
-    typeof kidMode !== "undefined" &&
-    kidMode === true
-  );
-
+function navigateEducationMode(mode) {
+  const validModes = ["home", "market", "simulation", "goal", "quiz", "history"];
+  if (!validModes.includes(mode)) mode = "home";
+  if (mode === educationMode) {
+    renderEducation();
+    return;
+  }
+  if (educationMode) {
+    educationHistory.push(educationMode);
+  }
+  if (educationHistory.length > EDUCATION_HISTORY_LIMIT) {
+    educationHistory = educationHistory.slice(-EDUCATION_HISTORY_LIMIT);
+  }
+  educationMode = mode;
+  resetCurrentQuizState();
+  renderEducation();
 }
 
-
-function educationText(
-  adult,
-  kid
-) {
-
-  return educationIsKidMode()
-    ? kid
-    : adult;
-
+function goBackEducation() {
+  resetCurrentQuizState();
+  if (educationHistory.length) {
+    educationMode = educationHistory.pop();
+    renderEducation();
+    return;
+  }
+  educationMode = "home";
+  renderEducation();
 }
 
-
-function educationEscape(
-  value
-) {
-
-  if (
-    value === null ||
-    value === undefined
-  ) {
-
-    return "";
-
-  }
-
-
-  return String(value)
-
-    .replaceAll(
-      "&",
-      "&amp;"
-    )
-
-    .replaceAll(
-      "<",
-      "&lt;"
-    )
-
-    .replaceAll(
-      ">",
-      "&gt;"
-    )
-
-    .replaceAll(
-      '"',
-      "&quot;"
-    )
-
-    .replaceAll(
-      "'",
-      "&#039;"
-    );
-
-}
-
-
-function educationFormatYen(
-  value
-) {
-
-  const number =
-    normalizeNumber(
-      value,
-      0
-    );
-
-
-  return `¥${Math.round(
-    number
-  ).toLocaleString(
-    "ja-JP"
-  )}`;
-
-}
-
-
-/* ============================================================
-   メイン
-============================================================ */
-
-function renderEducation() {
-
-  const target =
-    document.getElementById(
-      "educationContent"
-    );
-
-
-  if (!target) {
-    return;
-  }
-
-
-  recordStudy();
-
-
-  if (
-    educationMode === "market"
-  ) {
-
-    renderEducationMarket(
-      target
-    );
-
-    return;
-
-  }
-
-
-  if (
-    educationMode === "simulation"
-  ) {
-
-    renderEducationSimulation(
-      target
-    );
-
-    return;
-
-  }
-
-
-  if (
-    educationMode === "goal"
-  ) {
-
-    renderEducationGoal(
-      target
-    );
-
-    return;
-
-  }
-
-
-  if (
-    educationMode === "quiz"
-  ) {
-
-    renderEducationQuiz(
-      target
-    );
-
-    return;
-
-  }
-
-
-  if (
-    educationMode === "history"
-  ) {
-
-    renderEducationHistory(
-      target
-    );
-
-    return;
-
-  }
-
-
-  renderEducationHome(
-    target
-  );
-
-}
-
-
-/* ============================================================
-   ホーム
-============================================================ */
-
-function renderEducationHome(
-  target
-) {
-
-  const kid =
-    educationIsKidMode();
-
-
-  target.innerHTML = `
-
-    <div class="education-menu">
-
-      <button
-        type="button"
-        class="education-menu-card"
-        data-education-mode="market"
-      >
-
-        <span>📈</span>
-
-        <strong>
-          ${
-            kid
-              ? "きょうの おかね"
-              : "今日のお金"
-          }
-        </strong>
-
-        <small>
-          ${
-            kid
-              ? "おかねの うごきを みよう"
-              : "Market Dataから値動きを学ぶ"
-          }
-        </small>
-
+function renderEducationBackButton() {
+  return `
+    <div class="education-back">
+      <button type="button" class="secondary" data-education-back="true">
+        ${educationLabel("back")}
       </button>
-
-
-      <button
-        type="button"
-        class="education-menu-card"
-        data-education-mode="simulation"
-      >
-
-        <span>🧪</span>
-
-        <strong>
-          ${
-            kid
-              ? "もしも"
-              : "もしもシミュレーション"
-          }
-        </strong>
-
-        <small>
-          ${
-            kid
-              ? "おかねが どうなるか やってみよう"
-              : "複利・暴落・インフレを体験"
-          }
-        </small>
-
-      </button>
-
-
-      <button
-        type="button"
-        class="education-menu-card"
-        data-education-mode="goal"
-      >
-
-        <span>🎯</span>
-
-        <strong>
-          ${
-            kid
-              ? "もくひょう"
-              : "お金の目標"
-          }
-        </strong>
-
-        <small>
-          ${
-            kid
-              ? "いつ たまるかな？"
-              : "目標金額までの期間を計算"
-          }
-        </small>
-
-      </button>
-
-
-      <button
-        type="button"
-        class="education-menu-card"
-        data-education-mode="quiz"
-      >
-
-        <span>🧠</span>
-
-        <strong>
-          ${
-            kid
-              ? "おかねクイズ"
-              : "お金クイズ"
-          }
-        </strong>
-
-        <small>
-          ${
-            kid
-              ? "クイズで おぼえよう"
-              : "金融知識をクイズで復習"
-          }
-        </small>
-
-      </button>
-
-
-      <button
-        type="button"
-        class="education-menu-card"
-        data-education-mode="history"
-      >
-
-        <span>📚</span>
-
-        <strong>
-          ${
-            kid
-              ? "べんきょうきろく"
-              : "学習記録"
-          }
-        </strong>
-
-        <small>
-          ${
-            kid
-              ? "どれだけ まなんだかな"
-              : "これまでの学習状況"
-          }
-        </small>
-
-      </button>
-
     </div>
-
-
-    <div class="education-summary">
-
-      <div>
-
-        <strong>
-          ${educationState.studyDays}
-        </strong>
-
-        <span>
-          ${
-            kid
-              ? "べんきょうしたひ"
-              : "学習日数"
-          }
-        </span>
-
-      </div>
-
-
-      <div>
-
-        <strong>
-          ${educationState.quizCorrect}
-        </strong>
-
-        <span>
-          ${
-            kid
-              ? "せいかい"
-              : "正解数"
-          }
-        </span>
-
-      </div>
-
-
-      <div>
-
-        <strong>
-          ${educationState.completedLessons.length}
-        </strong>
-
-        <span>
-          ${
-            kid
-              ? "まなんだこと"
-              : "学習済み"
-          }
-        </span>
-
-      </div>
-
-    </div>
-
   `;
-
-
-  bindEducationButtons();
-
 }
 
-
 /* ============================================================
-   V2.4 Market Data
+   MARKET DATA
 ============================================================ */
+function getEducationMarketData() {
+  const result = [];
+  try {
+    if (typeof marketState === "undefined" || !marketState?.markets) {
+      return result;
+    }
+    const markets = marketState.markets;
+    const definitions = [
+      { key: "world", symbol: "WORLD", nameAdult: "全世界株式", nameKid: "せかいの かぶ" },
+      { key: "sp", symbol: "S&P500", nameAdult: "S&P500", nameKid: "アメリカの かぶ" }
+    ];
+    for (const definition of definitions) {
+      const data = markets[definition.key];
+      if (!data || !Array.isArray(data.series) || data.series.length === 0) continue;
+      const latest = data.series[data.series.length - 1];
+      const previous = data.series.length >= 2 ? data.series[data.series.length - 2] : null;
+      const value = Number(latest?.value);
+      const previousValue = Number(previous?.value);
+      if (!Number.isFinite(value)) continue;
+      
+      const change = Number.isFinite(previousValue) && previousValue !== 0
+        ? ((value - previousValue) / previousValue) * 100
+        : 0;
 
-function renderEducationMarket(
-  target
-) {
+      result.push({
+        key: definition.key,
+        symbol: definition.symbol,
+        name: educationIsKidMode() ? definition.nameKid : definition.nameAdult,
+        value,
+        previous: Number.isFinite(previousValue) ? previousValue : value,
+        change,
+        date: latest?.date || null
+      });
+    }
+  } catch (error) {
+    console.warn("education market error", error);
+  }
+  return result;
+}
 
-  const market =
-    getEducationMarketData();
-
-
+function renderEducationMarket(target) {
+  const market = getEducationMarketData();
   target.innerHTML = `
-
     ${renderEducationBackButton()}
-
-
     <div class="card">
-
-      <h2>
-        📈
-        ${
-          educationIsKidMode()
-            ? "きょうの おかね"
-            : "今日のお金"
-        }
-      </h2>
-
-      <p>
-        ${
-          educationText(
-            "今日の値動きを見て、「なぜ動いたのか」を考えてみよう。",
-            "きょう おかねが どう うごいたか みてみよう。"
-          )
-        }
-      </p>
-
+      <h2>📈 ${educationLabel("market")}</h2>
+      <p>${educationText("今日の値動きを見て、なぜ動いたのかを考えてみよう。", "きょう おかねが どう うごいたか みてみよう。")}</p>
     </div>
-
-
     ${
       market.length === 0
-
         ? `
-
           <div class="card">
-
-            <p>
-              ${
-                educationText(
-                  "現在、Market Dataを取得できません。",
-                  "いまは おかねの データを みられないよ。"
-                )
-              }
-            </p>
-
+            <div class="education-empty-icon">📊</div>
+            <h3>${educationText("今日のデータはまだありません", "きょうの データが まだ ないよ")}</h3>
+            <p>${educationText("「お金」画面の「更新」を押すと最新データを取得できます。", "「おかね」の がめんで「こうしん」を おしてみてね。")}</p>
           </div>
-
         `
-
         : `
-
           <div class="market-learning-grid">
-
-            ${
-              market
-                .map(
-                  renderMarketLearningCard
-                )
-                .join("")
-            }
-
+            ${market.map(renderMarketLearningCard).join("")}
           </div>
-
         `
     }
-
   `;
-
-
   bindEducationButtons();
-
 }
 
-
-function getEducationMarketData() {
-
-  try {
-
-    if (
-      typeof marketData !==
-      "undefined" &&
-      Array.isArray(
-        marketData
-      )
-    ) {
-
-      return marketData;
-
-    }
-
-  } catch (error) {
-
-    console.warn(
-      "marketData unavailable",
-      error
-    );
-
-  }
-
-
-  try {
-
-    const raw =
-      localStorage.getItem(
-        "kidsMoneyMarketData"
-      );
-
-
-    if (!raw) {
-      return [];
-    }
-
-
-    const parsed =
-      JSON.parse(raw);
-
-
-    if (
-      Array.isArray(parsed)
-    ) {
-
-      return parsed;
-
-    }
-
-  } catch (error) {
-
-    console.warn(
-      "market data load error",
-      error
-    );
-
-  }
-
-
-  return [];
-
-}
-
-
-function renderMarketLearningCard(
-  item
-) {
-
-  const safeItem =
-    item || {};
-
-
-  const name =
-    safeItem.name ||
-    safeItem.symbol ||
-    "インデックス";
-
-
-  const value =
-    normalizeNumber(
-      safeItem.value ??
-      safeItem.latest ??
-      safeItem.price ??
-      0,
-      0
-    );
-
-
-  const previous =
-    normalizeNumber(
-      safeItem.previous ??
-      safeItem.prev ??
-      value,
-      value
-    );
-
-
-  const change =
-    previous === 0
-
-      ? 0
-
-      : (
-          (
-            value -
-            previous
-          ) /
-          previous
-        ) * 100;
-
-
-  const sign =
-    change > 0
-      ? "+"
-      : "";
-
-
+function renderMarketLearningCard(item) {
+  const change = normalizeNumber(item.change, 0);
+  const sign = change > 0 ? "+" : "";
   return `
-
     <article class="card market-learning-card">
-
-      <h3>
-        ${educationEscape(name)}
-      </h3>
-
-      <strong>
-        ${value.toLocaleString(
-          "ja-JP"
-        )}
-      </strong>
-
-      <div>
-        ${sign}${change.toFixed(2)}%
-      </div>
-
-      <button
-        type="button"
-        class="secondary wide"
-        data-market-why="${educationEscape(
-          name
-        )}"
-      >
-
-        ❓
-
-        ${
-          educationIsKidMode()
-            ? "なぜ？"
-            : "なぜ動いた？"
-        }
-
+      <div class="market-learning-symbol">${educationEscape(item.symbol)}</div>
+      <h3>${educationEscape(item.name)}</h3>
+      <strong>${normalizeNumber(item.value, 0).toLocaleString("ja-JP")}</strong>
+      <div class="market-change">${sign}${change.toFixed(2)}%</div>
+      <button type="button" class="secondary wide" data-market-why="${educationEscape(item.name)}">
+        ❓ ${educationText("なぜ動いた？", "なぜ うごいたの？")}
       </button>
-
     </article>
-
   `;
-
 }
 
-
-function openMarketWhy(
-  name
-) {
-
-  const target =
-    document.getElementById(
-      "educationContent"
-    );
-
-
-  if (!target) {
-    return;
-  }
-
-
-  /*
-   * 詳細画面へ入るので
-   * 現在のmarket画面を履歴へ保存。
-   */
-  if (
-    educationMode === "market"
-  ) {
-
-    educationHistory.push(
-      "market"
-    );
-
-  }
-
-
-  if (
-    educationHistory.length >
-    EDUCATION_HISTORY_LIMIT
-  ) {
-
-    educationHistory =
-      educationHistory.slice(
-        -EDUCATION_HISTORY_LIMIT
-      );
-
-  }
-
-
-  resetCurrentQuizState();
-
-
-  markLessonCompleted(
-    `market-why-${name}`
-  );
-
-
+function openMarketWhy(name) {
+  const target = document.getElementById("educationContent");
+  if (!target) return;
+  
+  markLessonCompleted(`market-why-${name}`);
   target.innerHTML = `
-
     ${renderEducationBackButton()}
-
-
     <article class="card education-detail">
-
-      <div class="education-big-icon">
-        ❓
-      </div>
-
-      <h2>
-        ${educationEscape(name)}
-      </h2>
-
-      <h3>
-        ${
-          educationIsKidMode()
-            ? "なぜ うごくの？"
-            : "なぜ値段が動くの？"
-        }
-      </h3>
-
-      <p>
-        ${
-          educationText(
-            "株価や指数は、会社の業績、景気、金利、為替、将来への期待など、さまざまな要因によって動きます。",
-            "かいしゃの ちょうしや、けいき、おかねの かりやすさなどが かわると、ねだんが かわることが あるよ。"
-          )
-        }
-      </p>
-
-
+      <div class="education-big-icon">❓</div>
+      <h2>${educationEscape(name)}</h2>
+      <h3>${educationText("なぜ値段が動くの？", "なぜ うごくの？")}</h3>
+      <p>${educationText("会社の業績、景気、金利、世界のニュースなど、さまざまな理由で買いたい人と売りたい人のバランスが変わり、値段が動きます。", "かいしゃの ちょうしや ニュースなどで、ほしい ひとと いらない ひとが かわると ねだんが うごくよ。")}</p>
       <div class="learn-example">
-
-        <strong>
-          💡
-          ${
-            educationIsKidMode()
-              ? "おぼえておこう"
-              : "ポイント"
-          }
-        </strong>
-
-        <p>
-          ${
-            educationText(
-              "値上がりしたから必ず良い、値下がりしたから必ず悪い、とは限りません。",
-              "あがったから かならず いい、さがったから かならず わるい、とは かぎらないよ。"
-            )
-          }
-        </p>
-
+        <strong>💡 ${educationText("ポイント", "おぼえておこう")}</strong>
+        <p>${educationText("上がったり下がったりしながら、長期的には成長していく特徴があります。", "あがったり さがったり しながら、ながい めで みると ふえていく ことがあるよ。")}</p>
       </div>
-
     </article>
-
   `;
-
-
   bindEducationButtons();
-
 }
 
-
 /* ============================================================
-   V2.5 シミュレーション
+   HOME
 ============================================================ */
-
-function renderEducationSimulation(
-  target
-) {
-
+function renderEducationHome(target) {
+  const kid = educationIsKidMode();
   target.innerHTML = `
-
-    ${renderEducationBackButton()}
-
-
-    <div class="simulation-tabs">
-
-      <button
-        type="button"
-        class="active"
-        data-simulation="compound"
-      >
-        🌱 複利
-      </button>
-
-      <button
-        type="button"
-        data-simulation="crash"
-      >
-        📉 暴落
-      </button>
-
-      <button
-        type="button"
-        data-simulation="inflation"
-      >
-        🛒 インフレ
-      </button>
-
+    <div class="education-current-child">
+      <div class="education-current-child-icon">👤</div>
+      <div>
+        <small>${kid ? "いま べんきょうする ひと" : "現在の学習対象"}</small>
+        <strong>${educationEscape(getCurrentEducationChildName())}</strong>
+      </div>
     </div>
-
-
-    <div
-      id="simulationContent"
-    ></div>
-
+    <div class="education-menu">
+      <button type="button" class="education-menu-card" data-education-mode="market">
+        <span>📈</span>
+        <strong>${educationLabel("market")}</strong>
+        <small>${kid ? "きょうの おかねを みよう" : "今日の値動きから学ぶ"}</small>
+      </button>
+      <button type="button" class="education-menu-card" data-education-mode="simulation">
+        <span>🧪</span>
+        <strong>${educationLabel("simulation")}</strong>
+        <small>${kid ? "おかねが どうなるか やってみよう" : "複利・暴落・インフレを体験"}</small>
+      </button>
+      <button type="button" class="education-menu-card" data-education-mode="goal">
+        <span>🎯</span>
+        <strong>${educationLabel("goal")}</strong>
+        <small>${kid ? "いつ たまるかな？" : "目標金額までの期間を計算"}</small>
+      </button>
+      <button type="button" class="education-menu-card" data-education-mode="quiz">
+        <span>🧠</span>
+        <strong>${educationLabel("quiz")}</strong>
+        <small>${kid ? "クイズで おぼえよう" : "金融知識をクイズで復習"}</small>
+      </button>
+      <button type="button" class="education-menu-card" data-education-mode="history">
+        <span>📚</span>
+        <strong>${educationLabel("history")}</strong>
+        <small>${kid ? "どれだけ まんだかな" : "これまでの学習状況"}</small>
+      </button>
+    </div>
+    <div class="education-summary">
+      <div>
+        <strong>${educationState.studyDays}</strong>
+        <span>${kid ? "べんきょうしたひ" : "学習日数"}</span>
+      </div>
+      <div>
+        <strong>${educationState.quizCorrect}</strong>
+        <span>${kid ? "せいかい" : "正解数"}</span>
+      </div>
+      <div>
+        <strong>${educationState.completedLessons.length}</strong>
+        <span>${kid ? "まんだこと" : "学習済み"}</span>
+      </div>
+    </div>
   `;
-
-
-  renderCompoundSimulation();
-
   bindEducationButtons();
-
 }
 
-
-/* ============================================================
-   複利
-============================================================ */
-
-function renderCompoundSimulation() {
-
-  const target =
-    document.getElementById(
-      "simulationContent"
-    );
-
-
-  if (!target) {
-    return;
-  }
-
-
-  target.innerHTML = `
-
-    <div class="card">
-
-      <h2>🌱 複利シミュレーション</h2>
-
-      <label>
-
-        ${
-          educationIsKidMode()
-            ? "はじめの おかね"
-            : "初期金額"
-        }
-
-        <input
-          id="compoundPrincipal"
-          type="number"
-          value="10000"
-          min="0"
-          max="1000000000"
-          step="1000"
-          inputmode="numeric"
-        >
-
-      </label>
-
-
-      <label>
-
-        ${
-          educationIsKidMode()
-            ? "ねんりつ"
-            : "年間利率"
-        }
-
-        <input
-          id="compoundRate"
-          type="number"
-          value="5"
-          min="-100"
-          max="100"
-          step="0.1"
-          inputmode="decimal"
-        >
-
-        %
-
-      </label>
-
-
-      <label>
-
-        ${
-          educationIsKidMode()
-            ? "なんねん？"
-            : "期間"
-        }
-
-        <input
-          id="compoundYears"
-          type="number"
-          value="10"
-          min="1"
-          max="50"
-          step="1"
-          inputmode="numeric"
-        >
-
-        年
-
-      </label>
-
-
-      <button
-        type="button"
-        class="primary wide"
-        id="runCompound"
-      >
-        計算する
-      </button>
-
-    </div>
-
-
-    <div
-      id="compoundResult"
-    ></div>
-
-  `;
-
-
-  document
-    .getElementById(
-      "runCompound"
-    )
-    ?.addEventListener(
-      "click",
-      calculateCompound
-    );
-
-}
-
-
-function calculateCompound() {
-
-  const principal =
-    normalizeNumber(
-      document.getElementById(
-        "compoundPrincipal"
-      )?.value,
-      0
-    );
-
-
-  const rate =
-    normalizeNumber(
-      document.getElementById(
-        "compoundRate"
-      )?.value,
-      0
-    ) / 100;
-
-
-  const years =
-    normalizeNumber(
-      document.getElementById(
-        "compoundYears"
-      )?.value,
-      0
-    );
-
-
-  if (
-    principal < 0 ||
-    years <= 0 ||
-    rate <= -1 ||
-    rate > 1
-  ) {
-
-    showEducationError(
-      "compoundResult",
-      educationText(
-        "入力値を確認してください。",
-        "いれる おかねを かくにんしてね。"
-      )
-    );
-
-    return;
-
-  }
-
-
-  const result =
-    principal *
-    Math.pow(
-      1 + rate,
-      years
-    );
-
-
-  if (
-    !Number.isFinite(result)
-  ) {
-
-    showEducationError(
-      "compoundResult",
-      "計算できる範囲を超えています。"
-    );
-
-    return;
-
-  }
-
-
-  const target =
-    document.getElementById(
-      "compoundResult"
-    );
-
-
-  if (!target) {
-    return;
-  }
-
-
-  target.innerHTML = `
-
-    <div class="card simulation-result">
-
-      <h3>
-        ${
-          educationIsKidMode()
-            ? "🌱 けっか"
-            : "🌱 シミュレーション結果"
-        }
-      </h3>
-
-      <div class="simulation-number">
-
-        ${educationFormatYen(
-          result
-        )}
-
-      </div>
-
-      <p>
-        ${
-          educationText(
-            `${years}年間、毎年${(rate * 100).toFixed(1)}%で複利運用した場合の計算例です。実際の投資結果を保証するものではありません。`,
-            `${years}ねん、まいとし ${(rate * 100).toFixed(1)}% で おかねが ふえたと した ときの れいだよ。ほんとうに こうなるとは かぎらないよ。`
-          )
-        }
-      </p>
-
-    </div>
-
-  `;
-
-
-  markScenarioViewed(
-    "compound"
-  );
-
-}
-
-
-/* ============================================================
-   暴落
-============================================================ */
-
-function renderCrashSimulation() {
-
-  const target =
-    document.getElementById(
-      "simulationContent"
-    );
-
-
-  if (!target) {
-    return;
-  }
-
-
-  target.innerHTML = `
-
-    <div class="card">
-
-      <h2>📉 暴落シミュレーション</h2>
-
-      <p>
-        ${
-          educationText(
-            "投資価格が大きく下落したとき、元の金額に戻るにはどれくらい上昇が必要か計算します。",
-            "おかねが おおきく さがったら、もとの おかねに もどるには どれくらい ふえれば いいかな？"
-          )
-        }
-      </p>
-
-
-      <label>
-
-        ${
-          educationIsKidMode()
-            ? "はじめの おかね"
-            : "初期金額"
-        }
-
-        <input
-          id="crashPrincipal"
-          type="number"
-          value="100000"
-          min="0"
-          max="1000000000"
-          step="10000"
-          inputmode="numeric"
-        >
-
-      </label>
-
-
-      <label>
-
-        ${
-          educationIsKidMode()
-            ? "どれくらい さがった？"
-            : "下落率"
-        }
-
-        <input
-          id="crashRate"
-          type="number"
-          value="30"
-          min="1"
-          max="99.9"
-          step="0.1"
-          inputmode="decimal"
-        >
-
-        %
-
-      </label>
-
-
-      <button
-        type="button"
-        class="primary wide"
-        id="runCrash"
-      >
-        計算する
-      </button>
-
-    </div>
-
-
-    <div id="crashResult"></div>
-
-  `;
-
-
-  document
-    .getElementById(
-      "runCrash"
-    )
-    ?.addEventListener(
-      "click",
-      calculateCrash
-    );
-
-}
-
-
-function calculateCrash() {
-
-  const principal =
-    normalizeNumber(
-      document.getElementById(
-        "crashPrincipal"
-      )?.value,
-      0
-    );
-
-
-  const rate =
-    normalizeNumber(
-      document.getElementById(
-        "crashRate"
-      )?.value,
-      0
-    ) / 100;
-
-
-  if (
-    principal < 0 ||
-    rate <= 0 ||
-    rate >= 1
-  ) {
-
-    showEducationError(
-      "crashResult",
-      educationText(
-        "入力値を確認してください。",
-        "すうじを かくにんしてね。"
-      )
-    );
-
-    return;
-
-  }
-
-
-  const after =
-    principal *
-    (1 - rate);
-
-
-  const required =
-    after === 0
-
-      ? Infinity
-
-      : (
-          principal /
-          after -
-          1
-        ) * 100;
-
-
-  const target =
-    document.getElementById(
-      "crashResult"
-    );
-
-
-  if (!target) {
-    return;
-  }
-
-
-  target.innerHTML = `
-
-    <div class="card simulation-result">
-
-      <h3>📉 結果</h3>
-
-
-      <p>
-
-        ${educationFormatYen(
-          principal
-        )}
-
-        →
-
-        ${educationFormatYen(
-          after
-        )}
-
-      </p>
-
-
-      <div class="simulation-number">
-
-        ${
-          Number.isFinite(required)
-            ? `+${required.toFixed(1)}%`
-            : "∞"
-        }
-
-      </div>
-
-
-      <p>
-        ${
-          educationText(
-            "下落後の金額から元の金額に戻るために必要な上昇率です。",
-            "おかねが もとの きんがくに もどるために ひつような ふえかただよ。"
-          )
-        }
-      </p>
-
-
-      <div class="learn-example">
-
-        <strong>
-          💡 ポイント
-        </strong>
-
-        <p>
-          ${
-            educationText(
-              `${(rate * 100).toFixed(1)}%下落した場合、元に戻るには${required.toFixed(1)}%上昇する必要があります。`,
-              `${(rate * 100).toFixed(1)}% さがったら、もとに もどるには ${required.toFixed(1)}% ふえる ひつようが あるよ。`
-            )
-          }
-        </p>
-
-      </div>
-
-    </div>
-
-  `;
-
-
-  markScenarioViewed(
-    "crash"
-  );
-
-}
-
-
-/* ============================================================
-   インフレ
-============================================================ */
-
-function renderInflationSimulation() {
-
-  const target =
-    document.getElementById(
-      "simulationContent"
-    );
-
-
-  if (!target) {
-    return;
-  }
-
-
-  target.innerHTML = `
-
-    <div class="card">
-
-      <h2>🛒 インフレシミュレーション</h2>
-
-
-      <label>
-
-        ${
-          educationIsKidMode()
-            ? "いまの おかね"
-            : "現在の金額"
-        }
-
-        <input
-          id="inflationMoney"
-          type="number"
-          value="100000"
-          min="0"
-          max="1000000000"
-          step="10000"
-          inputmode="numeric"
-        >
-
-      </label>
-
-
-      <label>
-
-        ${
-          educationIsKidMode()
-            ? "ものの ねだんが どれくらい あがる？"
-            : "年間インフレ率"
-        }
-
-        <input
-          id="inflationRate"
-          type="number"
-          value="2"
-          min="0"
-          max="100"
-          step="0.1"
-          inputmode="decimal"
-        >
-
-        %
-
-      </label>
-
-
-      <label>
-
-        ${
-          educationIsKidMode()
-            ? "なんねん？"
-            : "期間"
-        }
-
-        <input
-          id="inflationYears"
-          type="number"
-          value="10"
-          min="1"
-          max="50"
-          step="1"
-          inputmode="numeric"
-        >
-
-        年
-
-      </label>
-
-
-      <button
-        type="button"
-        class="primary wide"
-        id="runInflation"
-      >
-        計算する
-      </button>
-
-    </div>
-
-
-    <div id="inflationResult"></div>
-
-  `;
-
-
-  document
-    .getElementById(
-      "runInflation"
-    )
-    ?.addEventListener(
-      "click",
-      calculateInflation
-    );
-
-}
-
-
-function calculateInflation() {
-
-  const money =
-    normalizeNumber(
-      document.getElementById(
-        "inflationMoney"
-      )?.value,
-      0
-    );
-
-
-  const rate =
-    normalizeNumber(
-      document.getElementById(
-        "inflationRate"
-      )?.value,
-      0
-    ) / 100;
-
-
-  const years =
-    normalizeNumber(
-      document.getElementById(
-        "inflationYears"
-      )?.value,
-      0
-    );
-
-
-  if (
-    money < 0 ||
-    rate < 0 ||
-    rate > 1 ||
-    years <= 0
-  ) {
-
-    showEducationError(
-      "inflationResult",
-      educationText(
-        "入力値を確認してください。",
-        "すうじを かくにんしてね。"
-      )
-    );
-
-    return;
-
-  }
-
-
-  const multiplier =
-    Math.pow(
-      1 + rate,
-      years
-    );
-
-
-  const futurePrice =
-    money *
-    multiplier;
-
-
-  const purchasingPower =
-    money /
-    multiplier;
-
-
-  if (
-    !Number.isFinite(
-      futurePrice
-    ) ||
-    !Number.isFinite(
-      purchasingPower
-    )
-  ) {
-
-    showEducationError(
-      "inflationResult",
-      "計算できる範囲を超えています。"
-    );
-
-    return;
-
-  }
-
-
-  const target =
-    document.getElementById(
-      "inflationResult"
-    );
-
-
-  if (!target) {
-    return;
-  }
-
-
-  target.innerHTML = `
-
-    <div class="card simulation-result">
-
-      <h3>🛒 結果</h3>
-
-
-      <p>
-        ${years}年後に
-        ${money.toLocaleString(
-          "ja-JP"
-        )}円
-        と同じものを買うには
-      </p>
-
-
-      <div class="simulation-number">
-
-        ${educationFormatYen(
-          futurePrice
-        )}
-
-      </div>
-
-
-      <p>
-        ${
-          educationText(
-            `インフレ率${(rate * 100).toFixed(1)}%が続くと仮定した計算例です。`,
-            `ものの ねだんが まいとし ${(rate * 100).toFixed(1)}% あがると した ときの れいだよ。`
-          )
-        }
-      </p>
-
-
-      <p>
-        ${
-          educationText(
-            `現在の${money.toLocaleString("ja-JP")}円の購買力は、約${Math.round(purchasingPower).toLocaleString("ja-JP")}円相当になります。`,
-            `いまの ${money.toLocaleString("ja-JP")}えんで かえるものは、${years}ねんごには もっと おかねが ひつように なるよ。`
-          )
-        }
-      </p>
-
-    </div>
-
-  `;
-
-
-  markScenarioViewed(
-    "inflation"
-  );
-
-}
-
-
-/* ============================================================
-   シミュレーション共通エラー
-============================================================ */
-
-function showEducationError(
-  elementId,
-  message
-) {
-
-  const target =
-    document.getElementById(
-      elementId
-    );
-
-
-  if (!target) {
-    return;
-  }
-
-
-  target.innerHTML = `
-
-    <div class="card">
-
-      <p>
-
-        ⚠️
-
-        ${educationEscape(
-          message
-        )}
-
-      </p>
-
-    </div>
-
-  `;
-
-}
-
-
-/* ============================================================
-   V2.6 目標
-============================================================ */
-
-function renderEducationGoal(
-  target
-) {
-
-  target.innerHTML = `
-
-    ${renderEducationBackButton()}
-
-
-    <div class="card">
-
-      <h2>
-
-        🎯
-
-        ${
-          educationIsKidMode()
-            ? "おかねの もくひょう"
-            : "お金の目標"
-        }
-
-      </h2>
-
-
-      <label>
-
-        ${
-          educationIsKidMode()
-            ? "いまの おかね"
-            : "現在の金額"
-        }
-
-        <input
-          id="goalCurrent"
-          type="number"
-          value="0"
-          min="0"
-          max="1000000000"
-          step="100"
-          inputmode="numeric"
-        >
-
-      </label>
-
-
-      <label>
-
-        ${
-          educationIsKidMode()
-            ? "ほしい おかね"
-            : "目標金額"
-        }
-
-        <input
-          id="goalTarget"
-          type="number"
-          value="50000"
-          min="1"
-          max="1000000000"
-          step="1000"
-          inputmode="numeric"
-        >
-
-      </label>
-
-
-      <label>
-
-        ${
-          educationIsKidMode()
-            ? "まいつき いくら ためる？"
-            : "毎月の積立額"
-        }
-
-        <input
-          id="goalMonthly"
-          type="number"
-          value="5000"
-          min="1"
-          max="100000000"
-          step="500"
-          inputmode="numeric"
-        >
-
-      </label>
-
-
-      <button
-        type="button"
-        class="primary wide"
-        id="runGoal"
-      >
-
-        ${
-          educationIsKidMode()
-            ? "いつ たまる？"
-            : "達成時期を計算"
-        }
-
-      </button>
-
-    </div>
-
-
-    <div id="goalResult"></div>
-
-  `;
-
-
-  document
-    .getElementById(
-      "runGoal"
-    )
-    ?.addEventListener(
-      "click",
-      calculateGoal
-    );
-
-
-  bindEducationButtons();
-
-}
-
-
-function calculateGoal() {
-
-  const current =
-    normalizeNumber(
-      document.getElementById(
-        "goalCurrent"
-      )?.value,
-      0
-    );
-
-
-  const targetAmount =
-    normalizeNumber(
-      document.getElementById(
-        "goalTarget"
-      )?.value,
-      0
-    );
-
-
-  const monthly =
-    normalizeNumber(
-      document.getElementById(
-        "goalMonthly"
-      )?.value,
-      0
-    );
-
-
-  const target =
-    document.getElementById(
-      "goalResult"
-    );
-
-
-  if (!target) {
-    return;
-  }
-
-
-  if (
-    current < 0 ||
-    targetAmount <= 0 ||
-    monthly <= 0
-  ) {
-
-    target.innerHTML = `
-
-      <div class="card">
-
-        ⚠️
-
-        ${
-          educationText(
-            "入力値を確認してください。",
-            "すうじを かくにんしてね。"
-          )
-        }
-
-      </div>
-
-    `;
-
-    return;
-
-  }
-
-
-  if (
-    targetAmount <= current
-  ) {
-
-    target.innerHTML = `
-
-      <div class="card simulation-result">
-
-        <h3>
-          🎉
-        </h3>
-
-        <p>
-          ${
-            educationText(
-              "すでに目標金額に到達しています。",
-              "もう もくひょうに とうたつしているよ！"
-            )
-          }
-        </p>
-
-      </div>
-
-    `;
-
-
-    markLessonCompleted(
-      "goal"
-    );
-
-
-    return;
-
-  }
-
-
-  const difference =
-    targetAmount -
-    current;
-
-
-  const months =
-    Math.ceil(
-      difference /
-      monthly
-    );
-
-
-  const years =
-    Math.floor(
-      months /
-      12
-    );
-
-
-  const remainingMonths =
-    months %
-    12;
-
-
-  const targetDate =
-    new Date();
-
-
-  targetDate.setMonth(
-    targetDate.getMonth() +
-    months
-  );
-
-
-  const dateText =
-    new Intl.DateTimeFormat(
-      "ja-JP",
-      {
-        year: "numeric",
-        month: "long"
-      }
-    ).format(
-      targetDate
-    );
-
-
-  target.innerHTML = `
-
-    <div class="card simulation-result">
-
-      <h3>
-
-        🎯
-
-        ${
-          educationIsKidMode()
-            ? "もくひょうまで"
-            : "目標達成まで"
-        }
-
-      </h3>
-
-
-      <div class="simulation-number">
-
-        ${
-          years > 0
-
-            ? `${years}年${remainingMonths}か月`
-
-            : `${remainingMonths}か月`
-
-        }
-
-      </div>
-
-
-      <p>
-
-        ${
-          educationText(
-            `毎月${monthly.toLocaleString("ja-JP")}円を積み立てると、約${dateText}に目標へ到達します。`,
-            `まいげつ ${monthly.toLocaleString("ja-JP")}えん ためると、${dateText}ごろに もくひょうに たどりつくよ。`
-          )
-        }
-
-      </p>
-
-
-      <div class="learn-example">
-
-        <strong>
-          💡 ポイント
-        </strong>
-
-        <p>
-
-          ${
-            educationText(
-              `目標までの残り金額は${difference.toLocaleString("ja-JP")}円です。`,
-              `あと ${difference.toLocaleString("ja-JP")}えん ためよう。`
-            )
-          }
-
-        </p>
-
-      </div>
-
-    </div>
-
-  `;
-
-
-  markLessonCompleted(
-    "goal"
-  );
-
-}
-
-
-/* ============================================================
-   V2.7 Quiz
-============================================================ */
-
-/*
- * クイズデータを取得。
- *
- * QUIZ_DATAが存在すればそちらを使用し、
- * なければ標準問題を使用。
- */
-function getQuizQuestions() {
-
+function getCurrentEducationChildName() {
   try {
-
-    if (
-      typeof QUIZ_DATA !==
-      "undefined"
-    ) {
-
-      if (
-        Array.isArray(
-          QUIZ_DATA
-        )
-      ) {
-
-        return QUIZ_DATA;
-
-      }
-
-
-      if (
-        Array.isArray(
-          QUIZ_DATA.items
-        )
-      ) {
-
-        return QUIZ_DATA.items;
-
-      }
-
+    if (typeof getCurrentChild === "function") {
+      const child = getCurrentChild();
+      if (child && child.name) return child.name;
     }
-
   } catch (error) {
-
-    console.warn(
-      "QUIZ_DATA unavailable",
-      error
-    );
-
+    console.warn(error);
   }
+  return educationIsKidMode() ? "おともだち" : "学習者";
+}
 
-
-  return [
-
+/* ============================================================
+   QUIZ DATA (12問内蔵)
+============================================================ */
+function getQuizQuestions() {
+  const questions = [
     {
       id: "percent-decrease",
-
-      question:
-        "10,000円が8,000円になりました。何％減った？",
-
-      kidQuestion:
-        "10000えんが 8000えんに なったよ。なん％ へった？",
-
+      question: "10,000円が8,000円になりました。何％減った？",
+      kidQuestion: "10000えんが 8000えんに なったよ。なん％ へった？",
       answer: 1,
-
       options: [
-
-        {
-          text: "10%",
-          kid: "10%"
-        },
-
-        {
-          text: "20%",
-          kid: "20%"
-        },
-
-        {
-          text: "30%",
-          kid: "30%"
-        }
-
+        { text: "10%", kid: "10%" },
+        { text: "20%", kid: "20%" },
+        { text: "30%", kid: "30%" }
       ],
-
-      explanation:
-        "2,000円減っているので、2,000 ÷ 10,000 = 20%です。",
-
-      kidExplanation:
-        "2000えん へったので、10000えんの 20%だよ。"
-
+      explanation: "2,000円減っているので、2,000 ÷ 10,000 = 20%です。",
+      kidExplanation: "2000えん へったので、10000えんの 20%だよ。"
     },
-
-
     {
       id: "investment-risk",
-
-      question:
-        "投資したお金は減ることがある？",
-
-      kidQuestion:
-        "とうしした おかねは へることが ある？",
-
+      question: "投資したお金は減ることがある？",
+      kidQuestion: "とうしした おかねは へることが ある？",
       answer: 1,
-
       options: [
-
-        {
-          text: "絶対に減らない",
-          kid: "ぜったいに へらない"
-        },
-
-        {
-          text: "減ることがある",
-          kid: "へることが ある"
-        },
-
-        {
-          text: "必ず半分になる",
-          kid: "かならず はんぶんになる"
-        }
-
+        { text: "絶対に減らない", kid: "ぜったいに へらない" },
+        { text: "減ることがある", kid: "へることが ある" },
+        { text: "必ず半分になる", kid: "かならず はんぶんになる" }
       ],
-
-      explanation:
-        "投資には価格変動があるため、元本を下回ることがあります。",
-
-      kidExplanation:
-        "とうしは ねだんが うごくので、へることも あるよ。"
-
+      explanation: "投資には価格変動があるため、元本を下回ることがあります。",
+      kidExplanation: "とうしは ねだんが うごくので、へることも あるよ。"
+    },
+    {
+      id: "compound",
+      question: "複利とはどんな仕組み？",
+      kidQuestion: "ふくりって どんな しくみ？",
+      answer: 1,
+      options: [
+        { text: "お金を使う仕組み", kid: "おかねを つかう しくみ" },
+        { text: "増えた分も次の計算に使う仕組み", kid: "ふえた おかねも つぎの けいさんに つかう" },
+        { text: "必ずお金が減る仕組み", kid: "かならず おかねが へる しくみ" }
+      ],
+      explanation: "複利では、元本だけでなく、それまでに増えた利益も次の運用に使われます。",
+      kidExplanation: "ふえた おかねも つぎに ふえるために つかわれる しくみだよ。"
+    },
+    {
+      id: "inflation",
+      question: "インフレになると、同じ100円で買えるものはどうなる？",
+      kidQuestion: "インフレに なると、100えんで かえるものは どうなる？",
+      answer: 1,
+      options: [
+        { text: "増える", kid: "ふえる" },
+        { text: "少なくなる", kid: "すくなくなる" },
+        { text: "必ず2倍になる", kid: "かならず 2ばいになる" }
+      ],
+      explanation: "物価が上がると、同じ金額で買える量が少なくなります。",
+      kidExplanation: "ものの ねだんが あがると、100えんで かえるものが すくなくなるよ。"
+    },
+    {
+      id: "saving",
+      question: "お金を貯めるときに大切なのは？",
+      kidQuestion: "おかねを ためるときに たいせつなのは？",
+      answer: 2,
+      options: [
+        { text: "全部使う", kid: "ぜんぶ つかう" },
+        { text: "何も考えない", kid: "なにも かんがえない" },
+        { text: "目的を決めて少しずつ貯める", kid: "もくひょうを きめて すこしずつ ためる" }
+      ],
+      explanation: "目的と金額を決めると、貯金を続けやすくなります。",
+      kidExplanation: "なんのために いくら ためるか きめると つづけやすいよ。"
+    },
+    {
+      id: "risk-return",
+      question: "一般に、リスクが高い投資にはどんな特徴がある？",
+      kidQuestion: "リスクが おおきい とうしには どんな とくちょうが ある？",
+      answer: 1,
+      options: [
+        { text: "値段が絶対に動かない", kid: "ねだんが ぜったいに うごかない" },
+        { text: "大きく増えることも減ることもある", kid: "おおきく ふえることも へることも ある" },
+        { text: "必ず利益が出る", kid: "かならず もうかる" }
+      ],
+      explanation: "リスクが高い資産では、価格の変動幅が大きくなることがあります。",
+      kidExplanation: "リスクが おおきいと、おかねが おおきく ふえたり へったりすることが あるよ。"
+    },
+    {
+      id: "diversification",
+      question: "分散投資の目的として近いものは？",
+      kidQuestion: "ぶんさん とうしは なんのため？",
+      answer: 1,
+      options: [
+        { text: "必ず利益を出す", kid: "かならず もうける" },
+        { text: "一つのものに集中するリスクを減らす", kid: "ひとつに ぜんぶ かける リスクを へらす" },
+        { text: "投資をしなくてよくする", kid: "とうしを しなくて よくする" }
+      ],
+      explanation: "複数の資産などに分けることで、一つの対象に集中するリスクを抑える考え方です。",
+      kidExplanation: "いろいろな ものに わけると、ひとつが へったときの えいきょうを へらせるよ。"
+    },
+    {
+      id: "interest",
+      question: "金利が上がると、一般にお金を借りるコストはどうなる？",
+      kidQuestion: "きんりが あがると、おかねを かりる おかねは どうなる？",
+      answer: 1,
+      options: [
+        { text: "下がる", kid: "さがる" },
+        { text: "上がりやすい", kid: "あがりやすい" },
+        { text: "必ずゼロになる", kid: "かならず 0に なる" }
+      ],
+      explanation: "金利が上昇すると、一般に借入にかかる利息負担が増える方向に働きます。",
+      kidExplanation: "きんりが あがると、おかねを かりるときの りそくが ふえることが あるよ。"
+    },
+    {
+      id: "budget",
+      question: "家計管理で最初に確認するとよいものは？",
+      kidQuestion: "おかねの かんりで まず なにを みる？",
+      answer: 0,
+      options: [
+        { text: "入ってくるお金と使うお金", kid: "はいってくる おかねと つかう おかね" },
+        { text: "欲しいものだけ", kid: "ほしいものだけ" },
+        { text: "値段の高いものだけ", kid: "たかいものだけ" }
+      ],
+      explanation: "収入と支出を把握すると、どれくらい貯められるか考えやすくなります。",
+      kidExplanation: "はいってくる おかねと つかう おかねを しると、いくら ためられるか わかるよ。"
+    },
+    {
+      id: "goal",
+      question: "貯金の目標を立てるときに大切なのは？",
+      kidQuestion: "おかねを ためる もくひょうで たいせつなのは？",
+      answer: 2,
+      options: [
+        { text: "いつでも変更できないようにする", kid: "ぜったいに かえない" },
+        { text: "金額を決めない", kid: "きんがくを きめない" },
+        { text: "何のためにいくら必要か決める", kid: "なんのために いくら ひつようか きめる" }
+      ],
+      explanation: "目的と必要金額を具体的にすると、行動計画を作りやすくなります。",
+      kidExplanation: "なんのために いくら ひつようか きめると、ためやすくなるよ。"
+    },
+    {
+      id: "loss-recovery",
+      question: "30%下落した資産が元の価格に戻るには、下落後から何%上昇が必要？",
+      kidQuestion: "30% さがった おかねが もとに もどるには、なん％ ふえれば いい？",
+      answer: 2,
+      options: [
+        { text: "30%", kid: "30%" },
+        { text: "40%", kid: "40%" },
+        { text: "約42.9%", kid: "やく42.9%" }
+      ],
+      explanation: "100が70になった場合、100に戻すには30÷70＝約42.9%の上昇が必要です。",
+      kidExplanation: "100が70に なったら、70から100に もどすには やく42.9% ふえる ひつようが あるよ。"
+    },
+    {
+      id: "cash-vs-investment",
+      question: "使う予定が近いお金を管理するときに重要なのは？",
+      kidQuestion: "すぐに つかう おかねを かんりするときに たいせつなのは？",
+      answer: 0,
+      options: [
+        { text: "必要なときに使えるようにする", kid: "ひつような ときに つかえるように する" },
+        { text: "必ず大きなリスクを取る", kid: "かならず おおきな リスクを とる" },
+        { text: "全部投資する", kid: "ぜんぶ とうしする" }
+      ],
+      explanation: "近いうちに使う予定のお金は、必要なときに使えることが重要です。",
+      kidExplanation: "すぐ つかう おかねは、ひつような ときに つかえるように しておくことが たいせつだよ。"
     }
-
   ];
 
+  try {
+    if (typeof QUIZ_DATA !== "undefined") {
+      if (Array.isArray(QUIZ_DATA) && QUIZ_DATA.length) return QUIZ_DATA;
+      if (Array.isArray(QUIZ_DATA.items) && QUIZ_DATA.items.length) return QUIZ_DATA.items;
+    }
+  } catch (error) {
+    console.warn("QUIZ_DATA unavailable", error);
+  }
+  return questions;
 }
 
-
 /* ============================================================
-   クイズ描画
+   QUIZ PICKER & RENDER
 ============================================================ */
+function pickQuizQuestion(questions) {
+  if (questions.length === 1) {
+    return { index: 0, question: questions[0] };
+  }
+  let candidates = questions
+    .map((question, index) => ({ question, index }))
+    .filter(item => !recentQuizQuestionIds.includes(String(item.question?.id ?? `question-${item.index}`)));
 
-function renderEducationQuiz(
-  target
-) {
+  if (candidates.length === 0) {
+    recentQuizQuestionIds = [];
+    candidates = questions.map((question, index) => ({ question, index }));
+  }
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
 
-  /*
-   * 新しい問題を表示する前に、
-   * 必ず現在の回答状態をリセット。
-   */
-  resetCurrentQuizState();
-
-
-  const questions =
-    getQuizQuestions();
-
-
-  if (
-    !Array.isArray(questions) ||
-    questions.length === 0
-  ) {
-
+function renderEducationQuiz(target) {
+  const questions = getQuizQuestions();
+  if (!Array.isArray(questions) || questions.length === 0) {
     target.innerHTML = `
-
       ${renderEducationBackButton()}
-
-
-      <div class="card">
-
-        <p>
-
-          ${
-            educationText(
-              "クイズデータがありません。",
-              "クイズが みつからないよ。"
-            )
-          }
-
-        </p>
-
-      </div>
-
+      <div class="card"><p>${educationText("クイズデータがありません。", "クイズが みつからないよ。")}</p></div>
     `;
-
-
     bindEducationButtons();
-
     return;
-
   }
 
+  const selected = pickQuizQuestion(questions);
+  const question = selected.question;
+  const index = selected.index;
+  if (!question) return;
 
-  /*
-   * 問題をランダム選択。
-   *
-   * 問題数が2問以上の場合は、
-   * 直前と同じ問題をなるべく避ける。
-   *
-   * ただし「直前の問題」を
-   * 回答状態として再利用することはない。
-   */
-  let index =
-    Math.floor(
-      Math.random() *
-      questions.length
-    );
+  const questionId = String(question.id ?? `question-${index}`);
+  currentQuizQuestionId = questionId;
+  currentQuizQuestionIndex = index;
+  currentQuizAnswered = false;
 
-
-  if (
-    questions.length > 1 &&
-    currentQuizQuestionIndex === index
-  ) {
-
-    index =
-      (
-        index + 1
-      ) %
-      questions.length;
-
+  recentQuizQuestionIds.push(questionId);
+  if (recentQuizQuestionIds.length > RECENT_QUIZ_LIMIT) {
+    recentQuizQuestionIds = recentQuizQuestionIds.slice(-RECENT_QUIZ_LIMIT);
   }
 
-
-  const question =
-    questions[index];
-
-
-  if (!question) {
-
-    resetCurrentQuizState();
-
-    return;
-
-  }
-
-
-  /*
-   * 現在問題を確定。
-   *
-   * IDを最優先。
-   */
-  currentQuizQuestionIndex =
-    index;
-
-
-  currentQuizQuestionId =
-    String(
-      question.id ??
-      `question-${index}`
-    );
-
-
-  /*
-   * 新しい問題なので未回答。
-   */
-  currentQuizAnswered =
-    false;
-
-
-  const questionText =
-    educationIsKidMode()
-
-      ? (
-          question.kidQuestion ||
-          question.question ||
-          ""
-        )
-
-      : (
-          question.question ||
-          ""
-        );
-
+  const questionText = educationIsKidMode()
+    ? (question.kidQuestion ?? question.question ?? "")
+    : (question.question ?? "");
 
   target.innerHTML = `
-
     ${renderEducationBackButton()}
-
-
-    <article
-      class="card quiz-card"
-      data-current-quiz-id="${educationEscape(
-        currentQuizQuestionId
-      )}"
-    >
-
-      <span class="quiz-number">
-
-        🧠
-
-        ${
-          educationIsKidMode()
-            ? "おかねクイズ"
-            : "お金クイズ"
-        }
-
-      </span>
-
-
-      <h2>
-
-        ${educationEscape(
-          questionText
-        )}
-
-      </h2>
-
-
+    <article class="card quiz-card" data-current-quiz-id="${educationEscape(questionId)}">
+      <span class="quiz-number">🧠 ${educationLabel("quiz")}</span>
+      <div class="quiz-progress">${educationText("次々といろいろな問題に挑戦しよう", "いろんな クイズに ちょうせんしよう")}</div>
+      <h2>${educationEscape(questionText)}</h2>
       <div class="quiz-options">
-
         ${
-          Array.isArray(
-            question.options
-          )
-
+          Array.isArray(question.options)
             ? question.options
-                .map(
-                  (
-                    option,
-                    i
-                  ) => {
-
-                    const optionText =
-                      educationIsKidMode()
-
-                        ? (
-                            option?.kid ??
-                            option?.text ??
-                            option
-                          )
-
-                        : (
-                            option?.text ??
-                            option
-                          );
-
-
-                    return `
-
-                      <button
-                        type="button"
-                        class="quiz-option"
-                        data-quiz-answer="${i}"
-                        data-quiz-question-id="${educationEscape(
-                          currentQuizQuestionId
-                        )}"
-                      >
-
-                        ${educationEscape(
-                          optionText
-                        )}
-
-                      </button>
-
-                    `;
-
-                  }
-                )
+                .map((option, optionIndex) => {
+                  const text = educationIsKidMode()
+                    ? (option?.kid ?? option?.text ?? option)
+                    : (option?.text ?? option);
+                  return `
+                    <button type="button" class="quiz-option" data-quiz-answer="${optionIndex}" data-quiz-question-id="${educationEscape(questionId)}">
+                      ${educationEscape(text)}
+                    </button>
+                  `;
+                })
                 .join("")
-
             : ""
-
         }
-
       </div>
-
-
-      <div
-        id="quizResult"
-      ></div>
-
+      <div id="quizResult"></div>
     </article>
-
   `;
-
-
-  /*
-   * ----------------------------------------------------------
-   * 互換性用dataset
-   * ----------------------------------------------------------
-   *
-   * 旧コードや他の処理が参照しても
-   * 問題が起きないように残す。
-   *
-   * ただし回答判定では
-   * quizQuestionIdを優先する。
-   */
-
-  target.dataset.quizIndex =
-    String(index);
-
-
-  target.dataset.quizAnswer =
-    String(
-      normalizeNumber(
-        question.answer,
-        0
-      )
-    );
-
-
-  target.dataset.quizQuestionId =
-    currentQuizQuestionId;
-
-
-  /*
-   * ここでイベントを設定。
-   */
+  target.dataset.quizIndex = String(index);
+  target.dataset.quizQuestionId = questionId;
   bindEducationButtons();
-
 }
-
-
-/* ============================================================
-   次のクイズ
-============================================================ */
 
 function nextQuiz() {
-
-  /*
-   * 現在の問題の状態を完全破棄。
-   */
   resetCurrentQuizState();
-
-
-  const target =
-    document.getElementById(
-      "educationContent"
-    );
-
-
-  if (!target) {
-    return;
-  }
-
-
-  /*
-   * 新しい問題を描画。
-   *
-   * renderEducationQuiz()内でも
-   * 再度resetされる。
-   */
-  renderEducationQuiz(
-    target
-  );
-
+  const target = document.getElementById("educationContent");
+  if (target) renderEducationQuiz(target);
 }
 
+function answerQuiz(answer) {
+  const resultTarget = document.getElementById("quizResult");
+  const content = document.getElementById("educationContent");
+  if (!resultTarget || !content || currentQuizAnswered) return;
 
-/* ============================================================
-   クイズ回答
-============================================================ */
+  const questions = getQuizQuestions();
+  const questionId = content.dataset.quizQuestionId || currentQuizQuestionId;
+  const question = questions.find(item => String(item?.id ?? "") === String(questionId));
 
-function answerQuiz(
-  answer
-) {
-
-  const resultTarget =
-    document.getElementById(
-      "quizResult"
-    );
-
-
-  const content =
-    document.getElementById(
-      "educationContent"
-    );
-
-
-  if (
-    !resultTarget ||
-    !content
-  ) {
-
-    return;
-
-  }
-
-
-  /*
-   * ----------------------------------------------------------
-   * 二重回答防止
-   * ----------------------------------------------------------
-   *
-   * 「現在表示中の1問」にだけ適用。
-   */
-  if (
-    currentQuizAnswered
-  ) {
-
-    return;
-
-  }
-
-
-  const questions =
-    getQuizQuestions();
-
-
-  if (
-    !Array.isArray(questions) ||
-    questions.length === 0
-  ) {
-
-    return;
-
-  }
-
-
-  /*
-   * ----------------------------------------------------------
-   * 現在問題の特定
-   * ----------------------------------------------------------
-   *
-   * 最優先：
-   *   educationContent.dataset.quizQuestionId
-   *
-   * 次：
-   *   currentQuizQuestionId
-   *
-   * 最後：
-   *   quizIndex
-   *
-   * これにより、
-   * 問題2へ進んだ際に
-   * 問題1の回答情報を再利用することを防ぐ。
-   */
-
-  const questionId =
-    content.dataset.quizQuestionId ||
-    currentQuizQuestionId;
-
-
-  let question =
-    questions.find(
-      item =>
-        String(
-          item?.id ??
-          ""
-        ) ===
-        String(
-          questionId ??
-          ""
-        )
-    );
-
-
-  /*
-   * IDを持たない旧データへの
-   * フォールバック。
-   */
   if (!question) {
-
-    const index =
-      Number(
-        content.dataset.quizIndex
-      );
-
-
-    if (
-      Number.isInteger(index) &&
-      index >= 0 &&
-      index < questions.length
-    ) {
-
-      question =
-        questions[index];
-
+    const index = Number(content.dataset.quizIndex);
+    if (Number.isInteger(index) && questions[index]) {
+      processQuizAnswer(answer, questions[index], resultTarget);
     }
-
-  }
-
-
-  if (!question) {
     return;
   }
+  processQuizAnswer(answer, question, resultTarget);
+}
 
+function processQuizAnswer(answer, question, target) {
+  if (currentQuizAnswered) return;
+  currentQuizAnswered = true;
 
-  /*
-   * ----------------------------------------------------------
-   * 回答判定
-   * ----------------------------------------------------------
-   */
+  const correctAnswer = normalizeNumber(question.answer, -999);
+  const userAnswer = normalizeNumber(answer, -999);
+  const correct = userAnswer === correctAnswer;
 
-  const correctAnswer =
-    normalizeNumber(
-      question.answer,
-      -999
-    );
-
-
-  const userAnswer =
-    normalizeNumber(
-      answer,
-      -999
-    );
-
-
-  const correct =
-    userAnswer ===
-    correctAnswer;
-
-
-  /*
-   * ----------------------------------------------------------
-   * ここで初めて回答済みにする
-   * ----------------------------------------------------------
-   *
-   * 問題表示時にはfalse。
-   * ボタンを押したときだけtrue。
-   */
-  currentQuizAnswered =
-    true;
-
-
-  /*
-   * ----------------------------------------------------------
-   * 学習履歴更新
-   * ----------------------------------------------------------
-   */
-
-  educationState.quizAnswered =
-    normalizeNumber(
-      educationState.quizAnswered,
-      0
-    ) + 1;
-
-
+  educationState.quizAnswered = Math.max(0, Math.floor(normalizeNumber(educationState.quizAnswered, 0))) + 1;
   if (correct) {
-
-    educationState.quizCorrect =
-      normalizeNumber(
-        educationState.quizCorrect,
-        0
-      ) + 1;
-
+    educationState.quizCorrect = Math.max(0, Math.floor(normalizeNumber(educationState.quizCorrect, 0))) + 1;
   }
-
-
-  if (
-    question.id
-  ) {
-
-    markLessonCompleted(
-      `quiz-${question.id}`
-    );
-
+  if (question.id) {
+    markLessonCompleted(`quiz-${question.id}`);
   }
-
-
   saveEducationState();
 
-
-  /*
-   * ----------------------------------------------------------
-   * 解説
-   * ----------------------------------------------------------
-   */
-
-  const explanation =
-    educationIsKidMode()
-
-      ? (
-          question.kidExplanation ||
-          question.explanation ||
-          ""
-        )
-
-      : (
-          question.explanation ||
-          ""
-        );
-
-
-  /*
-   * ----------------------------------------------------------
-   * 結果表示
-   * ----------------------------------------------------------
-   */
-
-  resultTarget.innerHTML = `
-
-    <div class="quiz-result">
-
-      <div class="quiz-result-icon">
-
-        ${
-          correct
-            ? "⭕"
-            : "❌"
-        }
-
-      </div>
-
-
-      <h3>
-
-        ${
-          correct
-
-            ? (
-                educationIsKidMode()
-                  ? "せいかい！"
-                  : "正解！"
-              )
-
-            : (
-                educationIsKidMode()
-                  ? "ざんねん！"
-                  : "残念！"
-              )
-
-        }
-
-      </h3>
-
-
-      <p>
-
-        ${
-          correct
-
-            ? educationText(
-                "正解です。少しずつ金融知識を身につけていきましょう。",
-                "せいかい！すこしずつ おかねの ことを おぼえていこう。"
-              )
-
-            : educationText(
-                "間違っても大丈夫です。解説を読んで覚えましょう。",
-                "まちがえても だいじょうぶ。せつめいを よんで おぼえよう。"
-              )
-
-        }
-
-      </p>
-
-
-      ${
-        explanation
-
-          ? `
-
-            <div class="learn-example">
-
-              <strong>
-
-                💡
-
-                ${
-                  educationIsKidMode()
-                    ? "なぜ？"
-                    : "解説"
-                }
-
-              </strong>
-
-
-              <p>
-
-                ${educationEscape(
-                  explanation
-                )}
-
-              </p>
-
-            </div>
-
-          `
-
-          : ""
-
-      }
-
-
-      <button
-        type="button"
-        class="primary"
-        id="nextQuizButton"
-      >
-
-        ${
-          educationIsKidMode()
-            ? "つぎの クイズ"
-            : "次のクイズ"
-        }
-
-      </button>
-
-    </div>
-
-  `;
-
-
-  /*
-   * 回答ボタンを無効化。
-   */
-  document
-    .querySelectorAll(
-      ".quiz-option"
-    )
-    .forEach(
-      button => {
-
-        button.disabled =
-          true;
-
-      }
-    );
-
-
-  /*
-   * 次のクイズ。
-   *
-   * onclickではなく
-   * addEventListenerを1回だけ設定。
-   */
-  document
-    .getElementById(
-      "nextQuizButton"
-    )
-    ?.addEventListener(
-      "click",
-      event => {
-
-        event.preventDefault();
-
-        event.stopPropagation();
-
-        nextQuiz();
-
-      }
-    );
-
-}
-
-
-/* ============================================================
-   学習履歴
-============================================================ */
-
-function renderEducationHistory(
-  target
-) {
-
-  const answered =
-    normalizeNumber(
-      educationState.quizAnswered,
-      0
-    );
-
-
-  const correct =
-    normalizeNumber(
-      educationState.quizCorrect,
-      0
-    );
-
-
-  const rate =
-    answered === 0
-
-      ? 0
-
-      : (
-          correct /
-          answered
-        ) * 100;
-
-
-  const scenarios =
-    Array.isArray(
-      educationState.viewedScenarios
-    )
-      ? educationState.viewedScenarios
-      : [];
-
-
-  const scenarioLabels = {
-
-    compound:
-      educationIsKidMode()
-        ? "ふくり"
-        : "複利",
-
-    crash:
-      educationIsKidMode()
-        ? "ぼうらく"
-        : "暴落",
-
-    inflation:
-      educationIsKidMode()
-        ? "インフレ"
-        : "インフレ"
-
-  };
-
+  const explanation = educationIsKidMode()
+    ? (question.kidExplanation ?? question.explanation ?? "")
+    : (question.explanation ?? "");
 
   target.innerHTML = `
-
-    ${renderEducationBackButton()}
-
-
-    <div class="card">
-
-      <h2>
-
-        📚
-
+    <div class="quiz-result">
+      <div class="quiz-result-icon">${correct ? "⭕" : "❌"}</div>
+      <h3>${correct ? educationText("せいかい！", "せいかい！") : educationText("残念！", "ざんねん！")}</h3>
+      <p>
         ${
-          educationIsKidMode()
-            ? "べんきょうきろく"
-            : "学習記録"
+          correct
+            ? educationText("正解です。少しずつ金融知識を身につけていきましょう。", "せいかい！すこしずつ おかねの ことを おぼえていこう。")
+            : educationText("間違っても大丈夫です。解説を読んで覚えましょう。", "まちがえても だいじょうぶ。せつめいを よんで おぼえよう。")
         }
-
-      </h2>
-
-
-      <div class="education-stat-grid">
-
-        <div>
-
-          <strong>
-            ${educationState.studyDays}
-          </strong>
-
-          <span>
-            ${
-              educationIsKidMode()
-                ? "べんきょうしたひ"
-                : "学習日数"
-            }
-          </span>
-
-        </div>
-
-
-        <div>
-
-          <strong>
-            ${answered}
-          </strong>
-
-          <span>
-            ${
-              educationIsKidMode()
-                ? "クイズ"
-                : "クイズ回答"
-            }
-          </span>
-
-        </div>
-
-
-        <div>
-
-          <strong>
-            ${correct}
-          </strong>
-
-          <span>
-            ${
-              educationIsKidMode()
-                ? "せいかい"
-                : "正解"
-            }
-          </span>
-
-        </div>
-
-
-        <div>
-
-          <strong>
-            ${rate.toFixed(0)}%
-          </strong>
-
-          <span>
-            ${
-              educationIsKidMode()
-                ? "せいかいりつ"
-                : "正解率"
-            }
-          </span>
-
-        </div>
-
-      </div>
-
-    </div>
-
-
-    <div class="card">
-
-      <h3>
-
-        🧪
-
-        ${
-          educationIsKidMode()
-            ? "やってみた もしも"
-            : "体験したシミュレーション"
-        }
-
-      </h3>
-
-
+      </p>
       ${
-        scenarios.length === 0
-
+        explanation
           ? `
-
-            <p>
-
-              ${
-                educationIsKidMode()
-                  ? "まだ やっていないよ。"
-                  : "まだシミュレーションを利用していません。"
-              }
-
-            </p>
-
+            <div class="learn-example">
+              <strong>💡 ${educationLabel("explanation")}</strong>
+              <p>${educationEscape(explanation)}</p>
+            </div>
           `
-
-          : `
-
-            <ul>
-
-              ${
-                scenarios
-                  .map(
-                    scenario => `
-
-                      <li>
-
-                        ${
-                          educationEscape(
-                            scenarioLabels[
-                              scenario
-                            ] ||
-                            scenario
-                          )
-                        }
-
-                      </li>
-
-                    `
-                  )
-                  .join("")
-              }
-
-            </ul>
-
-          `
+          : ""
       }
-
+      <button type="button" class="primary wide" id="nextQuizButton">
+        ${educationLabel("next")}
+      </button>
     </div>
-
-
-    <div class="card">
-
-      <h3>
-
-        🌱
-
-        ${
-          educationIsKidMode()
-            ? "おぼえたこと"
-            : "学習済み"
-        }
-
-      </h3>
-
-
-      <p>
-
-        ${
-          educationText(
-            "学習を続けることで、お金の仕組みが少しずつ分かるようになります。",
-            "おかねの ことを すこしずつ おぼえていこう。"
-          )
-        }
-
-      </p>
-
-
-      <p>
-
-        ${
-          educationText(
-            `学習済み項目：${educationState.completedLessons.length}`,
-            `おぼえた こと：${educationState.completedLessons.length}`
-          )
-        }
-
-      </p>
-
-    </div>
-
   `;
 
-
-  bindEducationButtons();
-
+  document.querySelectorAll(".quiz-option").forEach(button => {
+    button.disabled = true;
+  });
+  document.getElementById("nextQuizButton")?.addEventListener("click", nextQuiz);
 }
 
-
 /* ============================================================
-   シミュレーション切替
+   SIMULATION
 ============================================================ */
+function renderEducationSimulation(target) {
+  target.innerHTML = `
+    ${renderEducationBackButton()}
+    <div class="simulation-tabs">
+      <button type="button" class="active" data-simulation="compound">🌱 ${educationText("複利", "ふくり")}</button>
+      <button type="button" data-simulation="crash">📉 ${educationText("暴落", "ぼうらく")}</button>
+      <button type="button" data-simulation="inflation">🛒 ${educationText("インフレ", "いんふれ")}</button>
+    </div>
+    <div id="simulationContent"></div>
+  `;
+  renderCompoundSimulation();
+  bindEducationButtons();
+}
 
 function bindSimulationButtons() {
-
-  document
-    .querySelectorAll(
-      "[data-simulation]"
-    )
-    .forEach(
-      button => {
-
-        /*
-         * 再描画時の重複イベント防止。
-         */
-        button.onclick = null;
-
-
-        button.onclick =
-          event => {
-
-            event.preventDefault();
-
-            event.stopPropagation();
-
-
-            const type =
-              button.dataset.simulation;
-
-
-            document
-              .querySelectorAll(
-                "[data-simulation]"
-              )
-              .forEach(
-                b =>
-                  b.classList.remove(
-                    "active"
-                  )
-              );
-
-
-            button.classList.add(
-              "active"
-            );
-
-
-            if (
-              type === "compound"
-            ) {
-
-              renderCompoundSimulation();
-
-            }
-
-
-            if (
-              type === "crash"
-            ) {
-
-              renderCrashSimulation();
-
-            }
-
-
-            if (
-              type === "inflation"
-            ) {
-
-              renderInflationSimulation();
-
-            }
-
-          };
-
-      }
-    );
-
+  document.querySelectorAll("[data-simulation]").forEach(button => {
+    button.onclick = (e) => {
+      e.preventDefault();
+      document.querySelectorAll("[data-simulation]").forEach(b => b.classList.remove("active"));
+      button.classList.add("active");
+      const mode = button.dataset.simulation;
+      if (mode === "compound") renderCompoundSimulation();
+      else if (mode === "crash") renderCrashSimulation();
+      else if (mode === "inflation") renderInflationSimulation();
+    };
+  });
 }
 
-
-/* ============================================================
-   Button
-============================================================ */
-
-function bindEducationButtons() {
-
-  /*
-   * ========================================================
-   * 教育モードへの遷移
-   * ========================================================
-   */
-
-  document
-    .querySelectorAll(
-      "[data-education-mode]"
-    )
-    .forEach(
-      button => {
-
-        /*
-         * addEventListenerではなく
-         * onclickへ統一。
-         *
-         * 再描画によるイベント重複を防止。
-         */
-        button.onclick =
-          event => {
-
-            event.preventDefault();
-
-            event.stopPropagation();
-
-
-            const mode =
-              button.dataset.educationMode;
-
-
-            navigateEducationMode(
-              mode
-            );
-
-          };
-
-      }
-    );
-
-
-  /*
-   * ========================================================
-   * 戻るボタン
-   * ========================================================
-   */
-
-  document
-    .querySelectorAll(
-      "[data-education-back]"
-    )
-    .forEach(
-      button => {
-
-        button.onclick =
-          event => {
-
-            event.preventDefault();
-
-            event.stopPropagation();
-
-
-            goBackEducation();
-
-          };
-
-      }
-    );
-
-
-  /*
-   * ========================================================
-   * Market「なぜ？」
-   * ========================================================
-   */
-
-  document
-    .querySelectorAll(
-      "[data-market-why]"
-    )
-    .forEach(
-      button => {
-
-        button.onclick =
-          event => {
-
-            event.preventDefault();
-
-            event.stopPropagation();
-
-
-            openMarketWhy(
-              button.dataset.marketWhy
-            );
-
-          };
-
-      }
-    );
-
-
-  /*
-   * ========================================================
-   * Quiz
-   * ========================================================
-   *
-   * 現在表示中の問題のボタンだけに
-   * イベントを設定。
-   *
-   * onclick方式なので、
-   * 再描画によるイベント多重登録を防止。
-   */
-
-  document
-    .querySelectorAll(
-      "[data-quiz-answer]"
-    )
-    .forEach(
-      button => {
-
-        button.onclick =
-          event => {
-
-            event.preventDefault();
-
-            event.stopPropagation();
-
-
-            /*
-             * 問題IDが一致しない古いボタンからの
-             * 回答を念のため拒否。
-             */
-            const buttonQuestionId =
-              button.dataset.quizQuestionId;
-
-
-            if (
-              currentQuizQuestionId !== null &&
-              buttonQuestionId &&
-              String(
-                buttonQuestionId
-              ) !== String(
-                currentQuizQuestionId
-              )
-            ) {
-
-              return;
-
-            }
-
-
-            answerQuiz(
-              button.dataset.quizAnswer
-            );
-
-          };
-
-      }
-    );
-
-
-  /*
-   * ========================================================
-   * Simulation
-   * ========================================================
-   */
-
-  bindSimulationButtons();
-
+function renderCompoundSimulation() {
+  const target = document.getElementById("simulationContent");
+  if (!target) return;
+  target.innerHTML = `
+    <div class="card">
+      <h2>🌱 ${educationText("複利シミュレーション", "ふくり けいさん")}</h2>
+      <label>
+        ${educationText("初期金額", "はじめの おかね")}
+        <input id="compoundPrincipal" type="number" value="10000" min="0" step="1000">
+      </label>
+      <label>
+        ${educationText("年間利率 (%)", "ねんりつ (%)")}
+        <input id="compoundRate" type="number" value="5" min="-100" max="100" step="0.1">
+      </label>
+      <label>
+        ${educationText("期間 (年)", "なんねん (ねん)")}
+        <input id="compoundYears" type="number" value="10" min="1" max="50">
+      </label>
+      <button type="button" class="primary wide" id="runCompound">${educationLabel("calculate")}</button>
+    </div>
+    <div id="compoundResult"></div>
+  `;
+  document.getElementById("runCompound")?.addEventListener("click", calculateCompound);
 }
 
+function calculateCompound() {
+  const principal = normalizeNumber(document.getElementById("compoundPrincipal")?.value, 0);
+  const rate = normalizeNumber(document.getElementById("compoundRate")?.value, 0) / 100;
+  const years = normalizeNumber(document.getElementById("compoundYears")?.value, 0);
+  const target = document.getElementById("compoundResult");
+  if (!target) return;
+
+  if (principal < 0 || years <= 0 || rate <= -1 || rate > 1) {
+    target.innerHTML = `<div class="card"><p>⚠️ ${educationText("入力値を確認してください。", "すうじを かくにんしてね。")}</p></div>`;
+    return;
+  }
+  const result = principal * Math.pow(1 + rate, years);
+  target.innerHTML = `
+    <div class="card simulation-result">
+      <h3>🌱 ${educationLabel("result")}</h3>
+      <div class="simulation-number">${educationFormatYen(result)}</div>
+      <p>${educationText(`${years}年間、毎年${(rate * 100).toFixed(1)}%で運用できた場合の計算結果です。`, `${years}ねんで おかねが どのように ふえるかの れいやよ。`)}</p>
+    </div>
+  `;
+  markScenarioViewed("compound");
+}
+
+function renderCrashSimulation() {
+  const target = document.getElementById("simulationContent");
+  if (!target) return;
+  target.innerHTML = `
+    <div class="card">
+      <h2>📉 ${educationText("暴落シミュレーション", "ぼうらく けいさん")}</h2>
+      <label>
+        ${educationText("元のお金", "はじめの おかね")}
+        <input id="crashPrincipal" type="number" value="100000" min="0" step="10000">
+      </label>
+      <label>
+        ${educationText("下落率 (%)", "どれくらい さがった？ (%)")}
+        <input id="crashRate" type="number" value="30" min="1" max="99" step="1">
+      </label>
+      <button type="button" class="primary wide" id="runCrash">${educationLabel("calculate")}</button>
+    </div>
+    <div id="crashResult"></div>
+  `;
+  document.getElementById("runCrash")?.addEventListener("click", calculateCrash);
+}
+
+function calculateCrash() {
+  const principal = normalizeNumber(document.getElementById("crashPrincipal")?.value, 0);
+  const rate = normalizeNumber(document.getElementById("crashRate")?.value, 0) / 100;
+  const target = document.getElementById("crashResult");
+  if (!target) return;
+
+  if (principal <= 0 || rate <= 0 || rate >= 1) {
+    target.innerHTML = `<div class="card"><p>⚠️ ${educationText("入力値を確認してください。", "すうじを かくにnしてね。")}</p></div>`;
+    return;
+  }
+  const after = principal * (1 - rate);
+  const required = ((principal / after) - 1) * 100;
+
+  target.innerHTML = `
+    <div class="card simulation-result">
+      <h3>📉 ${educationLabel("result")}</h3>
+      <p>${educationFormatYen(principal)} → <strong>${educationFormatYen(after)}</strong></p>
+      <p>${educationText("元に戻るために必要な上昇率", "もとに もどるために ひつような あがりはば")}:</p>
+      <div class="simulation-number">+${required.toFixed(1)}%</div>
+    </div>
+  `;
+  markScenarioViewed("crash");
+}
+
+function renderInflationSimulation() {
+  const target = document.getElementById("simulationContent");
+  if (!target) return;
+  target.innerHTML = `
+    <div class="card">
+      <h2>🛒 ${educationText("インフレシミュレーション", "インフレ けいさん")}</h2>
+      <label>
+        ${educationText("現在の金額", "いまの おかね")}
+        <input id="inflationMoney" type="number" value="100000" min="0" step="10000">
+      </label>
+      <label>
+        ${educationText("年間インフレ率 (%)", "ものの ねだんの あがりはば (%)")}
+        <input id="inflationRate" type="number" value="2" min="0" max="100" step="0.1">
+      </label>
+      <label>
+        ${educationText("期間 (年)", "なんねんご？ (ねん)")}
+        <input id="inflationYears" type="number" value="10" min="1" max="50">
+      </label>
+      <button type="button" class="primary wide" id="runInflation">${educationLabel("calculate")}</button>
+    </div>
+    <div id="inflationResult"></div>
+  `;
+  document.getElementById("runInflation")?.addEventListener("click", calculateInflation);
+}
+
+function calculateInflation() {
+  const money = normalizeNumber(document.getElementById("inflationMoney")?.value, 0);
+  const rate = normalizeNumber(document.getElementById("inflationRate")?.value, 0) / 100;
+  const years = normalizeNumber(document.getElementById("inflationYears")?.value, 0);
+  const target = document.getElementById("inflationResult");
+  if (!target) return;
+
+  const multiplier = Math.pow(1 + rate, years);
+  const futurePrice = money * multiplier;
+
+  target.innerHTML = `
+    <div class="card simulation-result">
+      <h3>🛒 ${educationLabel("result")}</h3>
+      <p>${educationText(`${years}年後に同じものを買うために必要な金額`, `${years}ねんごに おなじ ものを かうのに ひつような おかね`)}:</p>
+      <div class="simulation-number">${educationFormatYen(futurePrice)}</div>
+    </div>
+  `;
+  markScenarioViewed("inflation");
+}
 
 /* ============================================================
-   ひらがなモード変更時
+   GOAL
 ============================================================ */
+function renderEducationGoal(target) {
+  target.innerHTML = `
+    ${renderEducationBackButton()}
+    <div class="card">
+      <h2>🎯 ${educationLabel("goal")}</h2>
+      <label>
+        ${educationText("現在の貯金額", "いまの おかね")}
+        <input id="goalCurrent" type="number" value="0" min="0" step="1000">
+      </label>
+      <label>
+        ${educationText("目標金額", "ほしい おかね")}
+        <input id="goalTarget" type="number" value="50000" min="1" step="1000">
+      </label>
+      <label>
+        ${educationText("毎月の積立額", "まいつき ためられる おかね")}
+        <input id="goalMonthly" type="number" value="5000" min="1" step="500">
+      </label>
+      <button type="button" class="primary wide" id="runGoal">${educationLabel("calculate")}</button>
+    </div>
+    <div id="goalResult"></div>
+  `;
+  document.getElementById("runGoal")?.addEventListener("click", calculateGoal);
+  bindEducationButtons();
+}
 
-function refreshEducationForModeChange() {
+function calculateGoal() {
+  const current = normalizeNumber(document.getElementById("goalCurrent")?.value, 0);
+  const targetAmount = normalizeNumber(document.getElementById("goalTarget")?.value, 0);
+  const monthly = normalizeNumber(document.getElementById("goalMonthly")?.value, 0);
+  const target = document.getElementById("goalResult");
+  if (!target) return;
 
-  const target =
-    document.getElementById(
-      "educationContent"
-    );
-
-
-  if (!target) {
+  if (targetAmount <= current) {
+    target.innerHTML = `<div class="card">🎉 ${educationText("すでに目標金額に到達しています！", "もう もくひょうを たっせい しているよ！")}</div>`;
+    markLessonCompleted("goal");
+    return;
+  }
+  if (monthly <= 0) {
+    target.innerHTML = `<div class="card">⚠️ ${educationText("毎月の積立額を入力してください。", "まいつき ためる おかねを いれてね。")}</div>`;
     return;
   }
 
+  const diff = targetAmount - current;
+  const months = Math.ceil(diff / monthly);
+  const years = Math.floor(months / 12);
+  const remMonths = months % 12;
 
-  /*
-   * モード変更時は
-   * クイズ状態を完全リセット。
-   */
-  resetCurrentQuizState();
-
-
-  renderEducation();
-
+  target.innerHTML = `
+    <div class="card simulation-result">
+      <h3>🎯 ${educationText("達成までの期間", "たっせいするまでの じかん")}</h3>
+      <div class="simulation-number">
+        ${years > 0 ? `${years}${educationText("年", "ねん")}` : ""}${remMonths}${educationText("か月", "にかげつ")}
+      </div>
+      <p>${educationText(`あと ${diff.toLocaleString("ja-JP")}円 貯める必要があります。`, `あと ${diff.toLocaleString("ja-JP")}えん ためよう！`)}</p>
+    </div>
+  `;
+  markLessonCompleted("goal");
 }
 
+/* ============================================================
+   HISTORY
+============================================================ */
+function renderEducationHistory(target) {
+  const kid = educationIsKidMode();
+  target.innerHTML = `
+    ${renderEducationBackButton()}
+    <div class="card">
+      <h2>📚 ${educationLabel("history")}</h2>
+      <p>${educationText("これまでの学習実績です。", "これまでに まなんだ きろくだよ。")}</p>
+      <div class="education-summary" style="margin-top:16px;">
+        <div>
+          <strong>${educationState.studyDays}</strong>
+          <span>${kid ? "べんきょうしたひ" : "学習日数"}</span>
+        </div>
+        <div>
+          <strong>${educationState.quizCorrect} / ${educationState.quizAnswered}</strong>
+          <span>${kid ? "せいかい / といた数" : "正解率 / 回答数"}</span>
+        </div>
+        <div>
+          <strong>${educationState.completedLessons.length}</strong>
+          <span>${kid ? "まなんだこと" : "完了レッスン"}</span>
+        </div>
+      </div>
+    </div>
+  `;
+  bindEducationButtons();
+}
 
 /* ============================================================
-   外部から教育画面を開くためのAPI
+   BINDING & RENDER
 ============================================================ */
+function bindEducationButtons() {
+  document.querySelectorAll("[data-education-mode]").forEach(button => {
+    button.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      navigateEducationMode(button.dataset.educationMode);
+    };
+  });
 
-function openEducationMode(
-  mode
-) {
+  document.querySelectorAll("[data-education-back]").forEach(button => {
+    button.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      goBackEducation();
+    };
+  });
 
-  const validModes = [
+  document.querySelectorAll("[data-market-why]").forEach(button => {
+    button.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openMarketWhy(button.dataset.marketWhy);
+    };
+  });
 
-    "home",
+  document.querySelectorAll("[data-quiz-answer]").forEach(button => {
+    button.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const qId = button.dataset.quizQuestionId;
+      if (qId && currentQuizQuestionId && String(qId) !== String(currentQuizQuestionId)) return;
+      answerQuiz(button.dataset.quizAnswer);
+    };
+  });
 
-    "market",
+  bindSimulationButtons();
+}
 
-    "simulation",
+function renderEducation() {
+  const target = document.getElementById("educationContent");
+  if (!target) return;
+  
+  loadCurrentChildEducationState();
+  recordStudy();
 
-    "goal",
+  if (educationMode === "market") { renderEducationMarket(target); return; }
+  if (educationMode === "simulation") { renderEducationSimulation(target); return; }
+  if (educationMode === "goal") { renderEducationGoal(target); return; }
+  if (educationMode === "quiz") { renderEducationQuiz(target); return; }
+  if (educationMode === "history") { renderEducationHistory(target); return; }
+  
+  renderEducationHome(target);
+}
 
-    "quiz",
-
-    "history"
-
-  ];
-
-
-  if (
-    !validModes.includes(
-      mode
-    )
-  ) {
-
-    mode =
-      "home";
-
-  }
-
-
-  /*
-   * 外部から教育画面を開く場合は
-   * 既存履歴をリセット。
-   */
+function openEducationMode(mode) {
+  resetCurrentQuizState();
+  recentQuizQuestionIds = [];
   educationHistory = [];
-
-
-  /*
-   * クイズ状態も完全リセット。
-   */
-  resetCurrentQuizState();
-
-
-  educationMode =
-    mode;
-
-
+  educationMode = mode;
   renderEducation();
-
 }
 
-
-/* ============================================================
-   起動
-============================================================ */
-
-document.addEventListener(
-  "DOMContentLoaded",
-  () => {
-
-    initEducation();
-
-  }
-);
+document.addEventListener("DOMContentLoaded", () => {
+  initEducation();
+});
