@@ -1,1188 +1,859 @@
 <!doctype html>
+
 <html lang="ja">
 <head>
   <meta charset="utf-8">
 
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1, viewport-fit=cover"
-  >
+<meta
+name=“viewport”
+content=“width=device-width, initial-scale=1, viewport-fit=cover”
 
-  <meta
-    name="theme-color"
-    content="#315efb"
-  >
+<meta
+name=“theme-color”
+content=”#315efb”
 
-  <meta
-    name="apple-mobile-web-app-capable"
-    content="yes"
-  >
+<meta
+name=“apple-mobile-web-app-capable”
+content=“yes”
 
   <title>こどもマネー・ラボ V2.7</title>
-
   <link
     rel="stylesheet"
     href="./style.css"
   >
 </head>
-
 <body>
-
 <header class="site-header">
-
   <div>
     <small>MONEY EDUCATION · V2.7</small>
-
-    <h1>
-      こどもマネー・ラボ
-    </h1>
-
-    <p>
-      ためる・つかう・ふやす・かんがえる
-    </p>
+<h1>
+  こどもマネー・ラボ
+</h1>
+<p>
+  ためる・つかう・ふやす・かんがえる
+</p>
   </div>
 
-  <button
-    id="settings"
-    class="icon-button"
-    type="button"
-    aria-label="せってい"
-  >
-    ⚙️
+<button
+id=“settings”
+class=“icon-button”
+type=“button”
+aria-label=“せってい”
+
+⚙️
   </button>
-
 </header>
-
-
 <main>
-
   <!-- =====================================================
        SUMMARY
   ====================================================== -->
-
   <section class="card hero">
-
-    <div class="mode-row">
-
-      <div class="child-selector">
-
-        <label for="child">
-          たいしょう
-        </label>
-
-        <div class="inline">
-
-          <select id="child"></select>
-
-          <button
-            id="addChild"
-            class="secondary"
-            type="button"
-          >
-            ＋ついか
-          </button>
-
-        </div>
-
-      </div>
-
-
-      <label class="switch">
-
-        <input
-          id="kidMode"
-          type="checkbox"
-        >
-
-        <span class="switch-slider"></span>
-
-        <span>
-          こどもモード
-        </span>
-
-      </label>
-
+<div class="mode-row">
+  <div class="child-selector">
+    <label for="child">
+      たいしょう
+    </label>
+    <div class="inline">
+      <select id="child"></select>
+      <button
+        id="addChild"
+        class="secondary"
+        type="button"
+      >
+        ＋ついか
+      </button>
     </div>
-
-
-    <div class="stats">
-
-      <div>
-        <small id="totalL">
-          ぜんぶ
-        </small>
-
-        <strong id="total">
-          ¥0
-        </strong>
-
-        <span id="note"></span>
-      </div>
-
-
-      <div>
-        <small id="cashL">
-          ためている
-        </small>
-
-        <b id="cash">
-          ¥0
-        </b>
-      </div>
-
-
-      <div>
-        <small id="investL">
-          ふやしている
-        </small>
-
-        <b id="invest">
-          ¥0
-        </b>
-      </div>
-
-    </div>
-
-
-    <div class="summary">
-
-      <span>
-        いれた
-        <b id="ins">
-          ¥0
-        </b>
-      </span>
-
-      <span>
-        つかった
-        <b id="outs">
-          ¥0
-        </b>
-      </span>
-
-      <span>
-        ふえた？
-        <b id="pnl">
-          ¥0
-        </b>
-      </span>
-
-    </div>
-
+  </div>
+  <label class="switch">
+    <input
+      id="kidMode"
+      type="checkbox"
+    >
+    <span class="switch-slider"></span>
+    <span>
+      こどもモード
+    </span>
+  </label>
+</div>
+<div class="stats">
+  <div>
+    <small id="totalL">
+      ぜんぶ
+    </small>
+    <strong id="total">
+      ¥0
+    </strong>
+    <span id="note"></span>
+  </div>
+  <div>
+    <small id="cashL">
+      ためている
+    </small>
+    <b id="cash">
+      ¥0
+    </b>
+  </div>
+  <div>
+    <small id="investL">
+      ふやしている
+    </small>
+    <b id="invest">
+      ¥0
+    </b>
+  </div>
+</div>
+<div class="summary">
+  <span>
+    いれた
+    <b id="ins">
+      ¥0
+    </b>
+  </span>
+  <span>
+    つかった
+    <b id="outs">
+      ¥0
+    </b>
+  </span>
+  <span>
+    ふえた？
+    <b id="pnl">
+      ¥0
+    </b>
+  </span>
+</div>
   </section>
-
-
   <!-- =====================================================
-       NAV
+       NAVIGATION
   ====================================================== -->
-
   <nav
     class="tabs"
     aria-label="メニュー"
   >
-
-    <button
-      class="tab active"
-      data-tab="home"
-      type="button"
-    >
-      🏠 ホーム
-    </button>
-
-    <button
-      class="tab"
-      data-tab="money"
-      type="button"
-    >
-      💰 おかね
-    </button>
-
-    <button
-      class="tab"
-      data-tab="future"
-      type="button"
-    >
-      📈 しょうらい
-    </button>
-
-    <button
-      class="tab"
-      data-tab="goals"
-      type="button"
-    >
-      🎯 めあて
-    </button>
-
-    <button
-      class="tab"
-      data-tab="learn"
-      type="button"
-    >
-      💡 まなぶ
-    </button>
-
-    <button
-      class="tab"
-      data-tab="education"
-      type="button"
-    >
-      🧪 おかねラボ
-    </button>
-
+<button
+  class="tab active"
+  data-tab="home"
+  type="button"
+>
+  🏠 ホーム
+</button>
+<button
+  class="tab"
+  data-tab="money"
+  type="button"
+>
+  💰 おかね
+</button>
+<button
+  class="tab"
+  data-tab="future"
+  type="button"
+>
+  📈 しょうらい
+</button>
+<button
+  class="tab"
+  data-tab="goals"
+  type="button"
+>
+  🎯 めあて
+</button>
+<button
+  class="tab"
+  data-tab="learn"
+  type="button"
+>
+  💡 まなぶ
+</button>
+<button
+  class="tab"
+  data-tab="education"
+  type="button"
+>
+  🧪 おかねラボ
+</button>
   </nav>
-
-
   <!-- =====================================================
        HOME
   ====================================================== -->
-
   <section
     id="home"
     class="panel active"
   >
-
-    <div class="section-header">
-
-      <h2 id="assetTitle">
-        おかねの ばしょ
-      </h2>
-
-      <div class="button-group">
-
-        <button
-          id="out"
-          class="secondary"
-          type="button"
-        >
-          − つかう
-        </button>
-
-        <button
-          id="in"
-          class="primary"
-          type="button"
-        >
-          ＋ いれる
-        </button>
-
-      </div>
-
-    </div>
-
-
-    <div
-      id="assets"
-      class="grid"
-    ></div>
-
-
-    <!-- INDEX -->
-
-    <div class="card">
-
-      <div class="section-header">
-
-        <h2>
-          インデックスの うごき
-        </h2>
-
-        <button
-          id="refresh"
-          class="secondary"
-          type="button"
-        >
-          ↻ 更新
-        </button>
-
-      </div>
-
-
-      <div
-        id="marketStatus"
-        class="muted"
-      >
-        まだ みていません
-      </div>
-
-
-      <div
-        id="market"
-        class="market-grid"
-      ></div>
-
-
-      <p class="notice">
-        インデックスの値を使った教育用の参考表示です。
-      </p>
-
-    </div>
-
-
-    <!-- LESSON -->
-
-    <div class="card lesson">
-
-      <small>
-        きょうの おべんきょう
-      </small>
-
-      <h3>
-        おかねには「いれる・つかう・のこす」があるよ
-      </h3>
-
-      <p>
-        おかねの うごきを きろくすると、
-        どこへいったか わかるよ。
-      </p>
-
-      <button
-        class="secondary tab-link"
-        data-tab="learn"
-        type="button"
-      >
-        💡 くわしく まなぶ →
-      </button>
-
-    </div>
-
-
-    <!-- CHART -->
-
-    <div class="card">
-
-      <div class="section-header">
-
-        <h2>
-          おかねの うごき
-        </h2>
-
-        <button
-          class="secondary tab-link"
-          data-tab="money"
-          type="button"
-        >
-          💰 きろくを みる →
-        </button>
-
-      </div>
-
-
-      <canvas
-        id="chart"
-        height="220"
-      ></canvas>
-
-    </div>
-
+<div class="section-header">
+  <h2 id="assetTitle">
+    おかねの ばしょ
+  </h2>
+  <div class="button-group">
+    <button
+      id="out"
+      class="secondary"
+      type="button"
+    >
+      − つかう
+    </button>
+    <button
+      id="in"
+      class="primary"
+      type="button"
+    >
+      ＋ いれる
+    </button>
+  </div>
+</div>
+<div
+  id="assets"
+  class="grid"
+></div>
+<!-- =================================================
+     INDEX
+================================================== -->
+<div class="card">
+  <div class="section-header">
+    <h2>
+      インデックスの うごき
+    </h2>
+    <button
+      id="refresh"
+      class="secondary"
+      type="button"
+    >
+      ↻ 更新
+    </button>
+  </div>
+  <div
+    id="marketStatus"
+    class="muted"
+  >
+    まだ みていません
+  </div>
+  <div
+    id="market"
+    class="market-grid"
+  ></div>
+  <p class="notice">
+    インデックスの値を使った教育用の参考表示です。
+    実際の投資成果を表すものではありません。
+  </p>
+</div>
+<!-- =================================================
+     DAILY LESSON
+================================================== -->
+<div class="card lesson">
+  <small>
+    きょうの おべんきょう
+  </small>
+  <h3>
+    おかねには「いれる・つかう・のこす」があるよ
+  </h3>
+  <p>
+    おかねの うごきを きろくすると、
+    どこへいったか わかるよ。
+  </p>
+  <button
+    class="secondary tab-link"
+    data-tab="learn"
+    type="button"
+  >
+    💡 くわしく まなぶ →
+  </button>
+</div>
+<!-- =================================================
+     MONEY CHART
+================================================== -->
+<div class="card">
+  <div class="section-header">
+    <h2>
+      おかねの うごき
+    </h2>
+    <button
+      class="secondary tab-link"
+      data-tab="money"
+      type="button"
+    >
+      💰 きろくを みる →
+    </button>
+  </div>
+  <canvas
+    id="chart"
+    height="220"
+  ></canvas>
+</div>
   </section>
-
-
   <!-- =====================================================
        MONEY
   ====================================================== -->
-
   <section
     id="money"
     class="panel"
   >
-
-    <div class="section-header">
-
-      <h2>
-        おかねの きろく
-      </h2>
-
-      <div class="button-group">
-
-        <button
-          id="out2"
-          class="secondary"
-          type="button"
-        >
-          − つかう
-        </button>
-
-        <button
-          id="in2"
-          class="primary"
-          type="button"
-        >
-          ＋ いれる
-        </button>
-
-      </div>
-
-    </div>
-
-
-    <div class="filters">
-
-      <select id="tf">
-        <option value="all">
-          すべて
-        </option>
-
-        <option value="in">
-          いれた
-        </option>
-
-        <option value="out">
-          つかった
-        </option>
-      </select>
-
-
-      <select id="af">
-        <option value="all">
-          すべて
-        </option>
-      </select>
-
-    </div>
-
-
-    <div id="txs"></div>
-
+<div class="section-header">
+  <h2>
+    おかねの きろく
+  </h2>
+  <div class="button-group">
+    <button
+      id="out2"
+      class="secondary"
+      type="button"
+    >
+      − つかう
+    </button>
+    <button
+      id="in2"
+      class="primary"
+      type="button"
+    >
+      ＋ いれる
+    </button>
+  </div>
+</div>
+<div class="filters">
+  <select id="tf">
+    <option value="all">
+      すべて
+    </option>
+    <option value="in">
+      いれた
+    </option>
+    <option value="out">
+      つかった
+    </option>
+  </select>
+  <select id="af">
+    <option value="all">
+      すべて
+    </option>
+  </select>
+</div>
+<div id="txs"></div>
   </section>
-
-
   <!-- =====================================================
        FUTURE
   ====================================================== -->
-
   <section
     id="future"
     class="panel"
   >
-
-    <div class="card">
-
-      <small>
-        FUTURE SIMULATION
-      </small>
-
-      <h2>
-        しょうらい、いくら？
-      </h2>
-
-      <p class="muted">
-        いまのおかねと、これから入れるおかねを
-        使って考えてみよう。
-      </p>
-
-
-      <div class="form-grid-3">
-
-        <label>
-          いまの年齢
-
-          <input
-            id="age"
-            type="number"
-            min="0"
-            max="100"
-            value="7"
-          >
-
-        </label>
-
-
-        <label>
-          1ねんに いれる
-
-          <input
-            id="annual"
-            type="number"
-            min="0"
-            step="10000"
-            value="120000"
-          >
-
-        </label>
-
-
-        <label>
-          何年後？
-
-          <input
-            id="years"
-            type="number"
-            min="1"
-            max="80"
-            value="10"
-          >
-
-        </label>
-
-      </div>
-
-
-      <div class="form-grid-2">
-
-        <label>
-
-          ためる
-
-          <b id="sr">
-            50%
-          </b>
-
-          <input
-            id="saveRatio"
-            type="range"
-            min="0"
-            max="100"
-            value="50"
-          >
-
-        </label>
-
-
-        <label>
-
-          ふやす
-
-          <b id="ir">
-            50%
-          </b>
-
-          <input
-            id="investRatio"
-            type="range"
-            min="0"
-            max="100"
-            value="50"
-          >
-
-        </label>
-
-      </div>
-
-
-      <button
-        id="simulate"
-        class="primary wide"
-        type="button"
-      >
-        しょうらいを みる
-      </button>
-
-    </div>
-
-
-    <div id="result"></div>
-
-
-    <div class="card">
-
-      <h3>
-        📉 もし おかねが 30%へったら？
-      </h3>
-
-      <p class="muted">
-        投資している部分だけ下がる体験をしてみよう。
-      </p>
-
+<div class="card">
+  <small>
+    FUTURE SIMULATION
+  </small>
+  <h2>
+    しょうらい、いくら？
+  </h2>
+  <p class="muted">
+    いまのおかねと、これから入れるおかねを
+    使って考えてみよう。
+  </p>
+  <div class="form-grid-3">
+    <label>
+      いまの年齢
       <input
-        id="crash"
+        id="age"
+        type="number"
+        min="0"
+        max="100"
+        value="7"
+      >
+    </label>
+    <label>
+      1ねんに いれる
+      <input
+        id="annual"
+        type="number"
+        min="0"
+        step="10000"
+        value="120000"
+      >
+    </label>
+    <label>
+      何年後？
+      <input
+        id="years"
+        type="number"
+        min="1"
+        max="80"
+        value="10"
+      >
+    </label>
+  </div>
+  <div class="form-grid-2">
+    <label>
+      ためる
+      <b id="sr">
+        50%
+      </b>
+      <input
+        id="saveRatio"
         type="range"
         min="0"
-        max="60"
-        value="30"
-        step="5"
+        max="100"
+        value="50"
       >
-
-      <b id="crashL">
-        -30%
+    </label>
+    <label>
+      ふやす
+      <b id="ir">
+        50%
       </b>
-
-      <div
-        id="crashBox"
-        class="crash-box"
-      ></div>
-
-    </div>
-
+      <input
+        id="investRatio"
+        type="range"
+        min="0"
+        max="100"
+        value="50"
+      >
+    </label>
+  </div>
+  <button
+    id="simulate"
+    class="primary wide"
+    type="button"
+  >
+    しょうらいを みる
+  </button>
+</div>
+<div id="result"></div>
+<div class="card">
+  <h3>
+    📉 もし おかねが 30%へったら？
+  </h3>
+  <p class="muted">
+    投資している部分だけ下がる体験をしてみよう。
+  </p>
+  <input
+    id="crash"
+    type="range"
+    min="0"
+    max="60"
+    value="30"
+    step="5"
+  >
+  <b id="crashL">
+    -30%
+  </b>
+  <div
+    id="crashBox"
+    class="crash-box"
+  ></div>
+</div>
   </section>
-
-
   <!-- =====================================================
        GOALS
   ====================================================== -->
-
   <section
     id="goals"
     class="panel"
   >
-
-    <div class="section-header">
-
-      <div>
-        <small>
-          GOAL
-        </small>
-
-        <h2>
-          🎯 めあて
-        </h2>
-      </div>
-
-
-      <div class="button-group">
-
-        <!-- ★追加：今日のお金へ戻る -->
-        <button
-          id="goalsBack"
-          class="secondary"
-          type="button"
-        >
-          ← 今日のお金
-        </button>
-
-
-        <button
-          id="addGoal"
-          class="primary"
-          type="button"
-        >
-          ＋ めあて
-        </button>
-
-      </div>
-
-    </div>
-
-
-    <!-- ★重要
-         目標だけを描画する専用領域
-         renderGoals() はここだけを書き換える -->
-    <div id="goalsList"></div>
-
-
-    <div class="card">
-
-      <h3>
-        めあてを つくろう
-      </h3>
-
-      <p>
-        「いつ」「なにに」「いくら」を決めると、
-        ためる理由がわかりやすくなるよ。
-      </p>
-
-    </div>
-
+<div class="section-header">
+  <div>
+    <small>
+      GOAL
+    </small>
+    <h2>
+      🎯 めあて
+    </h2>
+  </div>
+  <div class="button-group">
+    <button
+      id="goalsBack"
+      class="secondary"
+      type="button"
+    >
+      ← 今日のお金
+    </button>
+    <button
+      id="addGoal"
+      class="primary"
+      type="button"
+    >
+      ＋ めあて
+    </button>
+  </div>
+</div>
+<div
+  id="goalsList"
+></div>
+<div class="card">
+  <h3>
+    めあてを つくろう
+  </h3>
+  <p>
+    「いつ」「なにに」「いくら」を決めると、
+    ためる理由がわかりやすくなるよ。
+  </p>
+</div>
   </section>
-
-
   <!-- =====================================================
        LEARN
   ====================================================== -->
-
   <section
     id="learn"
     class="panel"
   >
-
-    <div class="section-header">
-
-      <div>
-
-        <small>
-          LEARNING
-        </small>
-
-        <h2>
-          📚
-
-          <span id="learnTitle">
-            おかねを まなぶ
-          </span>
-        </h2>
-
-        <p class="muted">
-          おかねの「なぜ？」を
-          たのしく しろう。
-        </p>
-
-      </div>
-
-
-      <button
-        id="learnBack"
-        class="secondary hidden"
-        type="button"
-      >
-        ← もどる
-      </button>
-
-    </div>
-
-
-    <div
-      id="learnContent"
-      class="learn-content"
-    >
-
-      <div class="card">
-
-        <p>
-          まなぶ データを よみこんでいます…
-        </p>
-
-      </div>
-
-    </div>
-
+<div class="section-header">
+  <div>
+    <small>
+      LEARNING
+    </small>
+    <h2>
+      📚
+      <span id="learnTitle">
+        おかねを まなぶ
+      </span>
+    </h2>
+    <p class="muted">
+      おかねの「なぜ？」を
+      たのしく しろう。
+    </p>
+  </div>
+  <button
+    id="learnBack"
+    class="secondary hidden"
+    type="button"
+  >
+    ← もどる
+  </button>
+</div>
+<!--
+  learn.js が
+  ・お金の基本
+  ・なぜなぜ
+  ・用語集
+  ・クイズ
+  などを描画する領域
+-->
+<div
+  id="learnContent"
+  class="learn-content"
+>
+  <div class="card">
+    <p>
+      まなぶ データを よみこんでいます…
+    </p>
+  </div>
+</div>
   </section>
-
-
   <!-- =====================================================
-       EDUCATION / おかねラボ
+       EDUCATION / MONEY LAB
   ====================================================== -->
-
   <section
     id="education"
     class="panel"
   >
-
-    <div class="section-header">
-
-      <div>
-
-        <small>
-          MONEY LAB
-        </small>
-
-        <h2>
-          🧪 おかねラボ
-        </h2>
-
-        <p class="muted">
-          おかねの しくみを
-          たのしく まなぼう。
-        </p>
-
-      </div>
-
-
-      <button
-        id="educationBack"
-        class="secondary hidden"
-        type="button"
-      >
-        ← もどる
-      </button>
-
-    </div>
-
-
-    <div
-      id="educationContent"
-      class="education-content"
-    >
-
-      <div class="card">
-
-        <p>
-          おかねラボを
-          よみこんでいます…
-        </p>
-
-      </div>
-
-    </div>
-
+<div class="section-header">
+  <div>
+    <small>
+      MONEY LAB
+    </small>
+    <h2>
+      🧪 おかねラボ
+    </h2>
+    <p class="muted">
+      おかねの しくみを
+      たのしく まなぼう。
+    </p>
+  </div>
+  <button
+    id="educationBack"
+    class="secondary hidden"
+    type="button"
+  >
+    ← もどる
+  </button>
+</div>
+<!--
+  education.js が
+  金利・複利・インフレ・投資・リスクなどの
+  教育コンテンツを描画する領域
+-->
+<div
+  id="educationContent"
+  class="education-content"
+>
+  <div class="card">
+    <p>
+      おかねラボを
+      よみこんでいます…
+    </p>
+  </div>
+</div>
   </section>
-
 </main>
-
-
 <!-- =====================================================
      TRANSACTION MODAL
 ====================================================== -->
-
 <div
   class="modal hidden"
   id="txModal"
 >
-
   <div class="modal-box">
-
-    <div class="section-header">
-
-      <h2 id="txTitle">
-        おかねを いれる
-      </h2>
-
-      <button
-        data-close="txModal"
-        class="modal-close"
-        type="button"
-      >
-        ×
-      </button>
-
-    </div>
-
-
-    <form id="txForm">
-
-      <input
-        id="txType"
-        type="hidden"
-      >
-
-
-      <label>
-        ひづけ
-
-        <input
-          id="date"
-          type="date"
-          required
-        >
-      </label>
-
-
-      <label>
-        いくら？
-
-        <input
-          id="amount"
-          type="number"
-          min="1"
-          step="1"
-          required
-        >
-      </label>
-
-
-      <label>
-        りゆう / つかいみち
-
-        <select id="reason">
-
-          <option>
-            おとしだま
-          </option>
-
-          <option>
-            おたんじょうび
-          </option>
-
-          <option>
-            おてつだい
-          </option>
-
-          <option>
-            おとうさん・おかあさん
-          </option>
-
-          <option>
-            おもちゃ
-          </option>
-
-          <option>
-            ほん・べんきょう
-          </option>
-
-          <option>
-            ゲーム
-          </option>
-
-          <option>
-            おでかけ
-          </option>
-
-          <option>
-            その他
-          </option>
-
-        </select>
-
-      </label>
-
-
-      <label>
-        どこ？
-
-        <select id="asset"></select>
-
-      </label>
-
-
-      <label>
-        メモ
-
-        <textarea
-          id="memo"
-          rows="3"
-        ></textarea>
-
-      </label>
-
-
-      <button
-        class="primary wide"
-        type="submit"
-      >
-        きろくする
-      </button>
-
-    </form>
-
-  </div>
-
+<div class="section-header">
+  <h2 id="txTitle">
+    おかねを いれる
+  </h2>
+  <button
+    data-close="txModal"
+    class="modal-close"
+    type="button"
+  >
+    ×
+  </button>
 </div>
-
-
+<form id="txForm">
+  <input
+    id="txType"
+    type="hidden"
+  >
+  <label>
+    ひづけ
+    <input
+      id="date"
+      type="date"
+      required
+    >
+  </label>
+  <label>
+    いくら？
+    <input
+      id="amount"
+      type="number"
+      min="1"
+      step="1"
+      required
+    >
+  </label>
+  <label>
+    りゆう / つかいみち
+    <select id="reason">
+      <option>
+        おとしだま
+      </option>
+      <option>
+        おたんじょうび
+      </option>
+      <option>
+        おてつだい
+      </option>
+      <option>
+        おとうさん・おかあさん
+      </option>
+      <option>
+        おもちゃ
+      </option>
+      <option>
+        ほん・べんきょう
+      </option>
+      <option>
+        ゲーム
+      </option>
+      <option>
+        おでかけ
+      </option>
+      <option>
+        その他
+      </option>
+    </select>
+  </label>
+  <label>
+    どこ？
+    <select id="asset"></select>
+  </label>
+  <label>
+    メモ
+    <textarea
+      id="memo"
+      rows="3"
+    ></textarea>
+  </label>
+  <button
+    class="primary wide"
+    type="submit"
+  >
+    きろくする
+  </button>
+</form>
+  </div>
+</div>
 <!-- =====================================================
      CHILD MODAL
 ====================================================== -->
-
 <div
   class="modal hidden"
   id="childModal"
 >
-
   <div class="modal-box">
-
-    <div class="section-header">
-
-      <h2>
-        こどもを ついか
-      </h2>
-
-      <button
-        data-close="childModal"
-        class="modal-close"
-        type="button"
-      >
-        ×
-      </button>
-
-    </div>
-
-
-    <form id="childForm">
-
-      <label>
-        なまえ
-
-        <input
-          id="childName"
-          required
-        >
-      </label>
-
-
-      <label>
-        うまれた年
-
-        <input
-          id="birth"
-          type="number"
-          min="1900"
-          max="2100"
-          required
-        >
-
-      </label>
-
-
-      <button
-        class="primary wide"
-        type="submit"
-      >
-        ついか
-      </button>
-
-    </form>
-
-  </div>
-
+<div class="section-header">
+  <h2>
+    こどもを ついか
+  </h2>
+  <button
+    data-close="childModal"
+    class="modal-close"
+    type="button"
+  >
+    ×
+  </button>
 </div>
-
-
+<form id="childForm">
+  <label>
+    なまえ
+    <input
+      id="childName"
+      required
+    >
+  </label>
+  <label>
+    うまれた年
+    <input
+      id="birth"
+      type="number"
+      min="1900"
+      max="2100"
+      required
+    >
+  </label>
+  <button
+    class="primary wide"
+    type="submit"
+  >
+    ついか
+  </button>
+</form>
+  </div>
+</div>
 <!-- =====================================================
      GOAL MODAL
 ====================================================== -->
-
 <div
   class="modal hidden"
   id="goalModal"
 >
-
   <div class="modal-box">
-
-    <div class="section-header">
-
-      <h2>
-        めあてを つくる
-      </h2>
-
-      <button
-        data-close="goalModal"
-        class="modal-close"
-        type="button"
-      >
-        ×
-      </button>
-
-    </div>
-
-
-    <form id="goalForm">
-
-      <label>
-        なまえ
-
-        <input
-          id="goalName"
-          required
-        >
-      </label>
-
-
-      <label>
-        いくら？
-
-        <input
-          id="goalAmount"
-          type="number"
-          min="1"
-          required
-        >
-      </label>
-
-
-      <label>
-        いつまで？
-
-        <input
-          id="goalDate"
-          type="date"
-          required
-        >
-      </label>
-
-
-      <label>
-        いま いくら？
-
-        <input
-          id="goalSaved"
-          type="number"
-          min="0"
-          value="0"
-        >
-      </label>
-
-
-      <button
-        class="primary wide"
-        type="submit"
-      >
-        つくる
-      </button>
-
-    </form>
-
-  </div>
-
+<div class="section-header">
+  <h2>
+    めあてを つくる
+  </h2>
+  <button
+    data-close="goalModal"
+    class="modal-close"
+    type="button"
+  >
+    ×
+  </button>
 </div>
-
-
+<form id="goalForm">
+  <label>
+    なまえ
+    <input
+      id="goalName"
+      required
+    >
+  </label>
+  <label>
+    いくら？
+    <input
+      id="goalAmount"
+      type="number"
+      min="1"
+      required
+    >
+  </label>
+  <label>
+    いつまで？
+    <input
+      id="goalDate"
+      type="date"
+      required
+    >
+  </label>
+  <label>
+    いま いくら？
+    <input
+      id="goalSaved"
+      type="number"
+      min="0"
+      value="0"
+    >
+  </label>
+  <button
+    class="primary wide"
+    type="submit"
+  >
+    つくる
+  </button>
+</form>
+  </div>
+</div>
 <!-- =====================================================
      SETTINGS
 ====================================================== -->
-
 <div
   class="modal hidden"
   id="settingsModal"
 >
-
   <div class="modal-box">
-
-    <div class="section-header">
-
-      <h2>
-        ⚙️ せってい
-      </h2>
-
-      <button
-        data-close="settingsModal"
-        class="modal-close"
-        type="button"
-      >
-        ×
-      </button>
-
-    </div>
-
-
-    <p class="muted">
-      V2.7 金融教育連携モード
-    </p>
-
-
-    <button
-      id="export"
-      class="secondary wide"
-      type="button"
-    >
-      ⬇️ データを ほぞん
-    </button>
-
-
-    <label class="file-button">
-
-      ⬆️ データを よみこむ
-
-      <input
-        id="import"
-        type="file"
-        accept=".json,application/json"
-      >
-
-    </label>
-
-
-    <button
-      id="reset"
-      class="danger wide"
-      type="button"
-    >
-      データを ぜんぶ けす
-    </button>
-
-  </div>
-
+<div class="section-header">
+  <h2>
+    ⚙️ せってい
+  </h2>
+  <button
+    data-close="settingsModal"
+    class="modal-close"
+    type="button"
+  >
+    ×
+  </button>
 </div>
-
-
+<p class="muted">
+  V2.7 金融教育連携モード
+</p>
+<button
+  id="export"
+  class="secondary wide"
+  type="button"
+>
+  ⬇️ データを ほぞん
+</button>
+<label class="file-button">
+  ⬆️ データを よみこむ
+  <input
+    id="import"
+    type="file"
+    accept=".json,application/json"
+  >
+</label>
+<button
+  id="reset"
+  class="danger wide"
+  type="button"
+>
+  データを ぜんぶ けす
+</button>
+  </div>
+</div>
 <!-- =====================================================
      ERROR
 ====================================================== -->
-
 <div
   id="errorBox"
   class="error-box hidden"
 ></div>
-
-
+<!-- =====================================================
+     FOOTER
+====================================================== -->
 <footer>
 
-  こどもマネー・ラボ V2.7｜
-  金融教育用です。投資成果を保証しません。
+こどもマネー・ラボ V2.7｜
+金融教育用です。投資成果を保証しません。
 
 </footer>
-
-
+<!-- =====================================================
+     JAVASCRIPT
+====================================================== -->
 <script src="./app.js"></script>
 <script src="./learn.js"></script>
 <script src="./education.js"></script>
-
 </body>
 </html>
