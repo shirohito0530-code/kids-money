@@ -1,6 +1,6 @@
 "use strict";
 /*
- * Kids Money Lab V32.4 - Education
+ * Kids Money Lab V33.0 - Education
  * - Why/Why section: 50 items, grouped by category.
  * - Glossary: 70+ items, grouped by category.
  * - Japanese adult UI and child-mode UI are both defined here.

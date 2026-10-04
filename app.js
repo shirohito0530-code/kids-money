@@ -1,15 +1,15 @@
 "use strict";
 
-/* Kids Money Lab V32.3 - single application contract
+/* Kids Money Lab V33.0 - single application contract
  * app.js owns state, child switching, money records, goals and global UI events.
  * education.js owns learning data normalization and rendering of the study dashboard.
  * learn.js owns quiz/lesson UI and writes learning results through the app API.
  */
-const APP_VERSION = 32;
-const STORAGE_KEY = "kidsMoneyLabV32";
-const LEGACY_KEYS = ["kidsMoneyLabV31", "kidsMoneyLabV30", "kidsMoneyLabV29", "kidsMoneyLabV28", "kidsMoneyLabV27", "kidsMoneyLabV26", "kidsMoneyLabV25", "kidsMoneyLabV24", "kidsMoneyLabV23", "kidsMoneyLabV22"];
-const SELECTED_CHILD_KEY = "kidsMoneySelectedChildV32";
-const LEGACY_SELECTED_KEYS = ["kidsMoneySelectedChildV31", "kidsMoneySelectedChildV30", "kidsMoneySelectedChildV29", "kidsMoneySelectedChildV28", "kidsMoneySelectedChildV27", "kidsMoneySelectedChildV26", "kidsMoneySelectedChildV25", "kidsMoneySelectedChildV24", "kidsMoneySelectedChildV23", "kidsMoneySelectedChildV22"];
+const APP_VERSION = 33;
+const STORAGE_KEY = "kidsMoneyLabV33";
+const LEGACY_KEYS = ["kidsMoneyLabV32","kidsMoneyLabV31", "kidsMoneyLabV30", "kidsMoneyLabV29", "kidsMoneyLabV28", "kidsMoneyLabV27", "kidsMoneyLabV26", "kidsMoneyLabV25", "kidsMoneyLabV24", "kidsMoneyLabV23", "kidsMoneyLabV22"];
+const SELECTED_CHILD_KEY = "kidsMoneySelectedChildV33";
+const LEGACY_SELECTED_KEYS = ["kidsMoneySelectedChildV32","kidsMoneySelectedChildV31", "kidsMoneySelectedChildV30", "kidsMoneySelectedChildV29", "kidsMoneySelectedChildV28", "kidsMoneySelectedChildV27", "kidsMoneySelectedChildV26", "kidsMoneySelectedChildV25", "kidsMoneySelectedChildV24", "kidsMoneySelectedChildV23", "kidsMoneySelectedChildV22"];
 const KID_MODE_KEY = "kidsMoneyKidMode";
 const MARKET_DATA_URL = "./data/market.json";
 let marketState = { markets: { world: null, sp: null }, source: "none" };
@@ -203,11 +203,12 @@ function renderChildSelector() {
   select.value=selectedChildId;
   const name = $("selectedChildName"); if (name) name.textContent=getCurrentChild()?.name || "";
   document.querySelectorAll("[data-child-edit],[data-child-delete]").forEach(e=>e.remove());
-  const wrap = select.closest(".child-actions") || select.parentElement;
-  if (wrap) {
+  const wrap = select.closest(".child-actions");
+  const manage = wrap?.querySelector(".child-manage") || wrap;
+  if (manage) {
     const edit=document.createElement("button"); edit.type="button"; edit.className="secondary"; edit.dataset.childEdit=selectedChildId; edit.textContent=kidMode?"✏️ なまえ":"✏️ 編集";
-    const del=document.createElement("button"); del.type="button"; del.className="secondary"; del.dataset.childDelete=selectedChildId; del.textContent=kidMode?"🗑️ けす":"🗑️ 削除";
-    wrap.append(edit,del);
+    const del=document.createElement("button"); del.type="button"; del.className="danger"; del.dataset.childDelete=selectedChildId; del.textContent=kidMode?"🗑️ けす":"🗑️ 削除";
+    manage.append(edit,del);
   }
 }
 function renderSummary() {
@@ -218,19 +219,56 @@ function renderSummary() {
   if($("investL")) $("investL").textContent=kidMode?"ふやしている":"投資";
   if($("note")) $("note").textContent=kidMode?"おかねの ぜんぶ":"投資損益 "+signedYen(r.pnl);
 }
+function getPreviousIndexValue(assetKey) {
+  const m = marketState?.markets?.[assetKey];
+  if (!m || !Array.isArray(m.series) || m.series.length < 2) return null;
+  const latest = m.series[m.series.length - 1];
+  const latestDate = String(latest?.date || "");
+  for (let i = m.series.length - 2; i >= 0; i--) {
+    const v = Number(m.series[i]?.value);
+    if (String(m.series[i]?.date || "") < latestDate && v > 0) return v;
+  }
+  return null;
+}
+function getIndexMarketImpact(child, assetKey) {
+  const current = getLatestIndexValue(assetKey);
+  const previous = getPreviousIndexValue(assetKey);
+  if (!current || !previous) return { change: getIndexChangeToday(assetKey), impact: null };
+  const position = calculateAsset(child, assetKey);
+  const impact = Number(position.units || 0) * (current - previous);
+  return { change: (current / previous - 1) * 100, impact };
+}
 function renderTodayMoney() {
-  const child=getCurrentChild(); const txs=(child?.transactions||[]).filter(tx=>String(tx.date)===today());
-  const income=txs.filter(tx=>tx.type!=='out').reduce((s,t)=>s+Number(t.amount||0),0);
-  const outcome=txs.filter(tx=>tx.type==='out').reduce((s,t)=>s+Number(t.amount||0),0);
-  const worldChange=getIndexChangeToday('world'), spChange=getIndexChangeToday('sp');
-  const investmentValue=calculateChild(child).investmentValue;
-  const changes=[worldChange,spChange].filter(v=>Number.isFinite(v));
-  const indexText=changes.length?changes.reduce((a,b)=>a+b,0)/changes.length:null;
-  const indexImpact=indexText!==null?investmentValue*indexText/100:0;
-  const box=$("todayMoney"); if(!box)return;
-  box.innerHTML=`<div class="today-grid"><div class="today-card"><span>${kidMode?"はいった おかね":"今日の入金"}</span><strong>${yen(income)}</strong></div><div class="today-card"><span>${kidMode?"つかった おかね":"今日の出金"}</span><strong>${yen(outcome)}</strong></div><div class="today-card"><span>${kidMode?"きょうの さ":"今日の差額"}</span><strong>${signedYen(income-outcome)}</strong></div></div>
-  <div class="today-index card"><div class="section-header"><strong>${kidMode?"📈 しすうの うごき":"📈 インデックスの今日の動き"}</strong><span class="meta">${indexText!==null?percent(indexText):"-"}</span></div><div class="today-index-grid"><div>🌎 ${kidMode?"せかいの かぶ":"全世界株式"}<strong>${worldChange!==null?percent(worldChange):"-"}</strong></div><div>🇺🇸 ${kidMode?"アメリカの かぶ":"S&P500"}<strong>${spChange!==null?percent(spChange):"-"}</strong></div><div>${kidMode?"とうしの えいきょう":"投資評価額への目安"}<strong>${indexText!==null?signedYen(indexImpact):"-"}</strong></div></div></div>
-  <div class="today-list">${txs.length?txs.map(tx=>`<div class="card"><strong>${tx.type==='out'?'−':'＋'}${yen(tx.amount)}</strong>　${escapeHtml(tx.reason||assetName(tx.asset))}</div>`).join(""):`<div class="muted">${kidMode?"きょうの おかねは まだ ないよ。":"今日のお金の記録はありません。"}</div>`}</div>`;
+  const child = getCurrentChild();
+  const txs = (child?.transactions || []).filter(tx => String(tx.date) === today());
+  const income = txs.filter(tx => tx.type !== "out").reduce((s,t) => s + Number(t.amount || 0), 0);
+  const outcome = txs.filter(tx => tx.type === "out").reduce((s,t) => s + Number(t.amount || 0), 0);
+  const world = getIndexMarketImpact(child, "world");
+  const sp = getIndexMarketImpact(child, "sp");
+  const impactValues = [world.impact, sp.impact].filter(v => Number.isFinite(v));
+  const totalIndexImpact = impactValues.reduce((a,b) => a+b, 0);
+  const box = $("todayMoney");
+  if (!box) return;
+  box.innerHTML = `
+    <div class="today-grid">
+      <div class="today-card"><span>${kidMode ? "はいった おかね" : "今日の入金"}</span><strong>${yen(income)}</strong></div>
+      <div class="today-card"><span>${kidMode ? "つかった おかね" : "今日の出金"}</span><strong>${yen(outcome)}</strong></div>
+      <div class="today-card"><span>${kidMode ? "きょうの さ" : "今日の差額"}</span><strong>${signedYen(income-outcome)}</strong></div>
+    </div>
+    <div class="today-index card">
+      <div class="section-header">
+        <strong>${kidMode ? "📈 しすうの うごき" : "📈 インデックスの今日の動き"}</strong>
+        <span class="meta">${(world.change != null || sp.change != null) ? "最新値ベース" : "-"}</span>
+      </div>
+      <div class="today-index-grid">
+        <div>🌎 ${kidMode ? "せかいの かぶ" : "全世界株式"}<strong>${world.change != null ? percent(world.change) : "-"}</strong><span class="meta">${world.impact != null ? signedYen(world.impact) : ""}</span></div>
+        <div>🇺🇸 ${kidMode ? "アメリカの かぶ" : "S&P500"}<strong>${sp.change != null ? percent(sp.change) : "-"}</strong><span class="meta">${sp.impact != null ? signedYen(sp.impact) : ""}</span></div>
+        <div>${kidMode ? "とうしの うごき" : "投資評価額への目安"}<strong>${impactValues.length ? signedYen(totalIndexImpact) : "-"}</strong><span class="meta">${kidMode ? "しすうの へんかを もとにした めやす" : "保有口数×指数変化による概算"}</span></div>
+      </div>
+    </div>
+    <div class="today-list">
+      ${txs.length ? txs.map(tx => `<div class="card"><strong>${tx.type === "out" ? "−" : "＋"}${yen(tx.amount)}</strong>　${escapeHtml(tx.reason || assetName(tx.asset))}</div>`).join("") : `<div class="muted">${kidMode ? "きょうの おかねは まだ ないよ。" : "今日のお金の記録はありません。"}</div>`}
+    </div>`;
 }
 function renderAssets() {
   const box=$("assets"); if(!box)return; const r=calculateChild(getCurrentChild()); box.innerHTML="";
@@ -275,6 +313,7 @@ function applyKidModeUI() {
     goalName:"目標名", goalAmount:"金額", goalDate:"期限", goalSaved:"いま貯めた金額",
     export:"データを書き出す", import:"データを読み込む", reset:"データをすべて削除", tf:"種類", af:"資産"
   };
+  const titleEl=$("appTitle"); if(titleEl) titleEl.textContent=k?"こどもの おかねラボ":"こどものお金ラボ";
   const textById={addChild:labels.addChild,settings:labels.settings,in:labels.in,in2:labels.in,out:labels.out,out2:labels.out,addGoal:labels.addGoal,simulate:labels.simulate,export:labels.export,reset:labels.reset,childModalTitle:k?"こどもを ついか":"子どもを追加",txTitle:k?"おかねを いれる":"入金を追加",txSubmit:k?"きろくする":"記録する"};
   Object.entries(textById).forEach(([id,text])=>set(id,text));
   const childLabel=document.querySelector('.child-title .label'); if(childLabel) childLabel.textContent=labels.childLabel;
@@ -291,6 +330,7 @@ function applyKidModeUI() {
   modalLabels.forEach(([id,text])=>{const el=$(id);if(el&&el.parentElement?.tagName==='LABEL')el.parentElement.childNodes[0].textContent=text;});
   const settingsTitle=document.querySelector('#settingsModal h2'); if(settingsTitle) settingsTitle.textContent=k?'せってい':'設定';
   const goalsTitle=document.querySelector('#goals .section-header h2'); if(goalsTitle) goalsTitle.textContent=labels.goals;
+  const goalModalTitle=document.querySelector('#goalModal h2'); if(goalModalTitle) goalModalTitle.textContent=k?"めあてを つくる":"目標を追加";
 }
 
 function renderAll(){ try{applyKidModeUI();renderChildSelector();renderSummary();renderAssets();renderFilters();renderTransactions();renderGoals();renderTodayMoney();window.dispatchEvent(new CustomEvent("kidsMoneyRendered",{detail:{childId:selectedChildId,child:getCurrentChild(),kidMode}}));}catch(e){console.error(e);showError(kidMode?"ひょうじで エラーが おきたよ。":"画面の表示中にエラーが発生しました。");} }
@@ -304,7 +344,7 @@ function handleTransactionSubmit(e){e.preventDefault();const c=getCurrentChild()
 function deleteTransaction(id){const c=getCurrentChild();const i=c?.transactions?.findIndex(t=>t.id===id);if(i<0)return;const tx=c.transactions[i];if(!confirm(kidMode?"この きろくを けしていい？":"この取引記録を削除しますか？"))return;c.transactions.splice(i,1);saveState();renderAll();}
 function handleGoalSubmit(e){e.preventDefault();const c=getCurrentChild();const name=$("goalName").value.trim(),amount=Number($("goalAmount").value),date=$("goalDate").value||today();if(!name||!(amount>0)){alert(kidMode?"めあてを いれてね。":"目標名と金額を入力してください。");return;}c.goals.push({id:createId(),name,amount,date,saved:Number($("goalSaved").value)||0});saveState();closeModal("goalModal");e.target.reset();renderAll();}
 function simulateFuture(){const c=calculateChild(getCurrentChild()),annual=Number($("annual")?.value)||0,years=Number($("years")?.value)||1,ratio=(Number($("saveRatio")?.value)||50)/100;const fv=(p,a,r)=>p*Math.pow(1+r,years)+a*((Math.pow(1+r,years)-1)/r);const total=fv(c.balances.cash,annual*ratio,ASSETS.cash.fixedRate)+fv(c.investmentValue,annual*(1-ratio),ASSETS.world.fixedRate);$("result").innerHTML=`<div class="card"><h3>${kidMode?"かんがえてみよう":"シミュレーション結果"}</h3><div class="value">${yen(total)}</div><p>${years}${kidMode?"ねん":"年"}${kidMode?"ご":"後"}</p></div>`;}
-function exportData(){const blob=new Blob([JSON.stringify({version:APP_VERSION,exportedAt:new Date().toISOString(),children:state.children},null,2)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="kids-money-v32.json";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
+function exportData(){const blob=new Blob([JSON.stringify({version:APP_VERSION,exportedAt:new Date().toISOString(),children:state.children},null,2)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="kids-money-v33.json";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
 function importData(e){const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=()=>{const p=parseState(r.result);if(!p){alert(kidMode?"データが ただしくないよ。":"JSONが正しくありません。");return;}state=p;selectedChildId=state.children[0].id;saveSelectedChildId();saveState();renderAll();alert(kidMode?"データを よみこんだよ。":"データを読み込みました。");};r.readAsText(f);}
 function resetData(){if(!confirm(kidMode?"ぜんぶ けしていい？":"データをすべて削除しますか？"))return;state=createDefaultState();selectedChildId=state.children[0].id;saveSelectedChildId();saveState();renderAll();}
 
