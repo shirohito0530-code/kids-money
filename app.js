@@ -1,6 +1,6 @@
 "use strict";
 
-/* Kids Money Lab V32 - single application contract
+/* Kids Money Lab V32.3 - single application contract
  * app.js owns state, child switching, money records, goals and global UI events.
  * education.js owns learning data normalization and rendering of the study dashboard.
  * learn.js owns quiz/lesson UI and writes learning results through the app API.
