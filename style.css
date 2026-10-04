@@ -6,3 +6,7 @@
 @media(max-width:700px){.quiz-card{padding:16px}.quiz-score{font-size:56px}.quiz-choice{min-height:48px}.quiz-progress{margin-top:2px}}
 
 .quiz-level-picker{padding:14px;margin:10px 0 14px;display:grid;gap:10px}.level-buttons{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.level-button{min-height:44px;padding:8px 10px;border-radius:12px;background:#eef2f8;color:#26324a;font-weight:800;border:1px solid #d7deea}.level-button.active{background:#315efb;color:#fff;border-color:#315efb}.quiz-level-picker p{margin:2px 0 0}.term-list{display:grid;gap:0;max-height:none}.term-item summary{padding-right:4px}@media(max-width:480px){.level-buttons{grid-template-columns:1fr}.level-button{width:100%;text-align:left}.quiz-level-picker{padding:12px}}
+
+/* V32.4 education / glossary categories */
+.education-section{margin-top:18px}.education-category{padding:16px;margin-bottom:12px}.education-category h3{margin:0 0 6px}.education-head{margin-top:0}.education-category .term-list{max-height:none}.education-category .why-item,.education-category .term-item{padding:11px 0}
+@media(max-width:700px){.education-head{display:grid}.education-head .primary{width:100%}.education-category{padding:14px}}

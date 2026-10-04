@@ -251,11 +251,53 @@ function renderTransactions() {
 }
 function renderGoals(){ const box=$("goalsList");if(!box)return;const child=getCurrentChild();box.innerHTML=(child?.goals||[]).length?(child.goals.map(g=>`<div class="card goal"><h3>${escapeHtml(g.name)}</h3><div>${yen(g.saved)} / ${yen(g.amount)}</div><div class="goal-bar"><span style="width:${g.amount?Math.min(100,g.saved/g.amount*100):0}%"></span></div><div class="meta">${escapeHtml(g.date)}</div></div>`).join("")):`<div class="card muted">${kidMode?"まだ めあてが ないよ。":"目標がありません。"}</div>`; }
 function renderFilters(){ const af=$("af");if(af){const cur=af.value||"all";af.innerHTML=`<option value="all">${kidMode?"ぜんぶ":"すべて"}</option>`;for(const [k,a] of Object.entries(ASSETS))af.insertAdjacentHTML("beforeend",`<option value="${k}">${a.icon} ${escapeHtml(assetName(k))}</option>`);af.value=[...af.options].some(o=>o.value===cur)?cur:"all";} }
-function renderAll(){ try{renderChildSelector();renderSummary();renderAssets();renderFilters();renderTransactions();renderGoals();renderTodayMoney();window.dispatchEvent(new CustomEvent("kidsMoneyRendered",{detail:{childId:selectedChildId,child:getCurrentChild(),kidMode}}));}catch(e){console.error(e);showError(kidMode?"ひょうじで エラーが おきたよ。":"画面の表示中にエラーが発生しました。");} }
+
+function applyKidModeUI() {
+  const k = kidMode;
+  const set = (id, text) => { const el=$(id); if(el) el.textContent=text; };
+  const tabTexts = k ? {home:"🏠 おうち",money:"💰 おかね",education:"📚 おべんきょう",learn:"🎯 クイズ",goals:"⭐ めあて"}
+                        : {home:"🏠 ホーム",money:"💰 お金",education:"📚 学習",learn:"🎯 クイズ",goals:"⭐ 目標"};
+  document.querySelectorAll('.tab').forEach(t=>{ if(tabTexts[t.dataset.tab]) t.textContent=tabTexts[t.dataset.tab]; });
+  const labels = k ? {
+    childLabel:"たいしょうの こども", addChild:"＋ こどもを ついか", homeToday:"きょうの おかね", todaySub:"えらんだ こどもの きろく",
+    assets:"もっている おかね", recent:"さいきんの きろく", moneyTitle:"おかねの きろく", moneySub:"こどもごとに おかねを きろくするよ。",
+    in:"＋ おかねを いれる", out:"− おかねを つかう", settings:"⚙️ せってい", mode:"こどもモード", goals:"めあて", addGoal:"＋ めあてを つくる",
+    simulation:"これからの おかね", annual:"1ねんで ふやす おかね", years:"なんねん", ratio:"ためる わりあい", simulate:"けいさん",
+    childName:"なまえ", birth:"うまれた とし", date:"ひづけ", amount:"おかね", asset:"しゅるい", reason:"りゆう", memo:"メモ",
+    goalName:"めあての なまえ", goalAmount:"ひつような おかね", goalDate:"いつまで", goalSaved:"いま たまった おかね",
+    export:"データを ほぞん", import:"データを よみこむ", reset:"データを ぜんぶ けす", tf:"しゅるい", af:"おかねの しゅるい"
+  } : {
+    childLabel:"対象の子ども", addChild:"＋ 子どもを追加", homeToday:"今日のお金", todaySub:"選択中の子どもの記録",
+    assets:"資産", recent:"最近の記録", moneyTitle:"お金の記録", moneySub:"入金・出金を子どもごとに管理します。",
+    in:"＋ 入金", out:"− 出金", settings:"⚙️ 設定", mode:"こどもモード", goals:"目標", addGoal:"＋ 目標を追加",
+    simulation:"将来シミュレーション", annual:"年間追加額", years:"年数", ratio:"ためる割合", simulate:"計算",
+    childName:"名前", birth:"生まれた年", date:"日付", amount:"金額", asset:"種類", reason:"理由", memo:"メモ",
+    goalName:"目標名", goalAmount:"金額", goalDate:"期限", goalSaved:"いま貯めた金額",
+    export:"データを書き出す", import:"データを読み込む", reset:"データをすべて削除", tf:"種類", af:"資産"
+  };
+  const textById={addChild:labels.addChild,settings:labels.settings,in:labels.in,in2:labels.in,out:labels.out,out2:labels.out,addGoal:labels.addGoal,simulate:labels.simulate,export:labels.export,reset:labels.reset,childModalTitle:k?"こどもを ついか":"子どもを追加",txTitle:k?"おかねを いれる":"入金を追加",txSubmit:k?"きろくする":"記録する"};
+  Object.entries(textById).forEach(([id,text])=>set(id,text));
+  const childLabel=document.querySelector('.child-title .label'); if(childLabel) childLabel.textContent=labels.childLabel;
+  const todayHead=document.querySelector('#home .section-header h2'); if(todayHead) todayHead.textContent=labels.homeToday;
+  const todaySub=document.querySelector('#home .section-header .muted'); if(todaySub) todaySub.textContent=labels.todaySub;
+  const assetHeads=document.querySelectorAll('#home .section-header h2'); if(assetHeads[1]) assetHeads[1].textContent=labels.assets;
+  if(assetHeads[2]) assetHeads[2].textContent=labels.recent;
+  const moneyH=document.querySelector('#money .section-header h2'); if(moneyH) moneyH.textContent=labels.moneyTitle;
+  const moneySub=document.querySelector('#money .section-header .muted'); if(moneySub) moneySub.textContent=labels.moneySub;
+  const modeLabel=document.querySelector('.mode-switch span'); if(modeLabel) modeLabel.textContent=labels.mode;
+  const simSummary=document.querySelector('.panel-tools details > summary'); if(simSummary) simSummary.textContent=labels.simulation;
+  const filterLabels=document.querySelectorAll('#money .filters label'); if(filterLabels[0]) filterLabels[0].firstChild.textContent=labels.tf; if(filterLabels[1]) filterLabels[1].firstChild.textContent=labels.af;
+  const modalLabels=[['childName',labels.childName],['birth',labels.birth],['date',labels.date],['amount',labels.amount],['asset',labels.asset],['reason',labels.reason],['memo',labels.memo],['goalName',labels.goalName],['goalAmount',labels.goalAmount],['goalDate',labels.goalDate],['goalSaved',labels.goalSaved],['annual',labels.annual],['years',labels.years],['saveRatio',labels.ratio]];
+  modalLabels.forEach(([id,text])=>{const el=$(id);if(el&&el.parentElement?.tagName==='LABEL')el.parentElement.childNodes[0].textContent=text;});
+  const settingsTitle=document.querySelector('#settingsModal h2'); if(settingsTitle) settingsTitle.textContent=k?'せってい':'設定';
+  const goalsTitle=document.querySelector('#goals .section-header h2'); if(goalsTitle) goalsTitle.textContent=labels.goals;
+}
+
+function renderAll(){ try{applyKidModeUI();renderChildSelector();renderSummary();renderAssets();renderFilters();renderTransactions();renderGoals();renderTodayMoney();window.dispatchEvent(new CustomEvent("kidsMoneyRendered",{detail:{childId:selectedChildId,child:getCurrentChild(),kidMode}}));}catch(e){console.error(e);showError(kidMode?"ひょうじで エラーが おきたよ。":"画面の表示中にエラーが発生しました。");} }
 
 function openChildModal(id=null){ editingChildId=id; const m=$("childModal");if(!m)return;const c=id?getChildById(id):null;$("childName").value=c?.name||"";$("birth").value=c?.birthYear||"";$("childModalTitle").textContent=id?(kidMode?"こどもを なおす":"子どもを編集"):(kidMode?"こどもを ついか":"子どもを追加");$("childSubmit").textContent=id?(kidMode?"ほぞん":"変更を保存"):(kidMode?"ついか":"追加");m.classList.remove("hidden"); }
 function closeModal(id){$(id)?.classList.add("hidden");if(id==="childModal")editingChildId=null;if(id==="txModal")editingTransactionId=null;}
-function handleChildSubmit(e){e.preventDefault();const name=$("childName").value.trim(),birth=Number($("birth").value);if(!name||!birth){alert(kidMode?"なまえと うまれた年を いれてね。":"名前と生まれた年を入力してください。");return;}if(editingChildId){const c=getChildById(editingChildId);c.name=name;c.birthYear=birth;}else{const c=normalizeChild({id:createId(),name,birthYear:birth,transactions:[],goals:[],learning:{}});state.children.push(c);selectedChildId=c.id;saveSelectedChildId();}saveState();closeModal("childModal");e.target.reset();renderAll();window.dispatchEvent(new CustomEvent("kidsMoneyChildChanged",{detail:{childId:selectedChildId,child:getCurrentChild()}}));}
+function handleChildSubmit(e){e.preventDefault();const name=$("childName").value.trim(),birth=Number($("birth").value);if(!name||!birth){alert(kidMode?"なまえと うまれた としを いれてね。":"名前と生まれた年を入力してください。");return;}if(editingChildId){const c=getChildById(editingChildId);c.name=name;c.birthYear=birth;}else{const c=normalizeChild({id:createId(),name,birthYear:birth,transactions:[],goals:[],learning:{}});state.children.push(c);selectedChildId=c.id;saveSelectedChildId();}saveState();closeModal("childModal");e.target.reset();renderAll();window.dispatchEvent(new CustomEvent("kidsMoneyChildChanged",{detail:{childId:selectedChildId,child:getCurrentChild()}}));}
 function deleteChild(id){if(state.children.length<=1){alert(kidMode?"ひとりだけは けせないよ。":"子どもが1人だけのときは削除できません。");return;}const c=getChildById(id);if(!c)return;if(!confirm(kidMode?c.name+" を けしていい？":c.name+" とその記録を削除しますか？"))return;const i=state.children.findIndex(x=>x.id===id);state.children.splice(i,1);if(id===selectedChildId)selectedChildId=state.children[Math.max(0,i-1)].id;saveSelectedChildId();saveState();renderAll();window.dispatchEvent(new CustomEvent("kidsMoneyChildChanged",{detail:{childId:selectedChildId,child:getCurrentChild()}}));}
 function openTransactionModal(type,id=null){const c=getCurrentChild();if(!c)return;editingTransactionId=id;const tx=id?c.transactions.find(t=>t.id===id):null;$("txType").value=tx?.type||type;$("txTitle").textContent=tx?(kidMode?"おかねを なおす":(tx.type==='in'?"入金を編集":"出金を編集")):(kidMode?(type==='in'?"おかねを いれる":"おかねを つかう"):(type==='in'?"入金を追加":"出金を追加"));$("date").value=tx?.date||today();$("amount").value=tx?.amount||"";$("reason").value=tx?.reason||"";$("memo").value=tx?.memo||"";$("asset").innerHTML=Object.entries(ASSETS).map(([k,a])=>`<option value="${k}">${a.icon} ${escapeHtml(assetName(k))}</option>`).join("");$("asset").value=tx?.asset||"cash";$("txSubmit").textContent=tx?(kidMode?"ほぞん":"変更を保存"):(kidMode?"きろくする":"記録する");$("txModal").classList.remove("hidden");}
 function handleTransactionSubmit(e){e.preventDefault();const c=getCurrentChild();if(!c)return;const type=$("txType").value==='out'?'out':'in',amount=Number($("amount").value),asset=$("asset").value,date=$("date").value||today();if(!(amount>0)||!ASSETS[asset]){alert(kidMode?"ただしい おかねを いれてね。":"金額と資産を確認してください。");return;}let tx=editingTransactionId?c.transactions.find(t=>t.id===editingTransactionId):null;if(tx){tx.type=type;tx.amount=amount;tx.asset=asset;tx.date=date;tx.reason=$("reason").value||"";tx.memo=$("memo").value.trim();tx.indexAtTransaction=(asset!=="cash"?(getIndexValue(asset,date)||tx.indexAtTransaction||null):null);}else c.transactions.push({id:createId(),type,amount,asset,date,reason:$("reason").value||"",memo:$("memo").value.trim(),indexAtTransaction:(asset!=="cash"?getIndexValue(asset,date):null),createdAt:new Date().toISOString()});saveState();closeModal("txModal");e.target.reset();editingTransactionId=null;renderAll();}
